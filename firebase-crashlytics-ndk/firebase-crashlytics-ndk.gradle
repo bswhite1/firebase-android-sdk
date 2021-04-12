@@ -109,13 +109,13 @@ def fixTrampolineFilenames(variantBaseName) {
 }
 
 thirdPartyLicenses {
-    add 'Crashpad', "file://${rootDir}/third_party/licenses/apache-2.0.txt"
+    add 'Crashpad', "file://C:/Users/bwhite/Documents/git/new_firebase/firebase-android-sdk/third_party/licenses/apache-2.0.txt"
 }
 
 dependencies {
     implementation project(':firebase-common')
     implementation project(':firebase-components')
-    implementation project(':firebase-crashlytics')
+    implementation 'com.google.firebase:firebase-crashlytics:2.1.1'
     implementation 'com.google.android.gms:play-services-basement:17.0.0'
 
     testImplementation 'androidx.test:runner:1.2.0'

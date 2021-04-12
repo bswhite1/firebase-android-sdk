@@ -105,7 +105,7 @@ configurations.all {
 
 
 thirdPartyLicenses {
-    add 'Dagger', "file://${rootDir}/third_party/licenses/apache-2.0.txt"
+    add 'Dagger', "file://C:/Users/bwhite/Documents/git/new_firebase/firebase-android-sdk/third_party/licenses/apache-2.0.txt"
 }
 
 dependencies {

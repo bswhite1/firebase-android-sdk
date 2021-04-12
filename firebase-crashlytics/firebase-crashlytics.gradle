@@ -49,7 +49,7 @@ android {
 }
 
 thirdPartyLicenses {
-    add 'Tape', "file://${projectDir}/third_party_licenses/tape/LICENSE"
+    add 'Tape', "file://C:/Users/bwhite/Documents/git/new_firebase/firebase-android-sdk/firebase-crashlytics/third_party_licenses/tape/LICENSE"
 }
 
 dependencies {
