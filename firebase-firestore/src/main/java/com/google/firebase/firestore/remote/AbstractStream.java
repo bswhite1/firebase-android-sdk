@@ -353,6 +353,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   @Override
   public void stop() {
     if (isStarted()) {
+      Logger.debug("Ben_Firebase", "AbstractStream stop");
       close(State.Initial, Status.OK);
     }
   }
@@ -382,6 +383,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
     if (this.isOpen()) {
       // When timing out an idle stream there's no reason to force the stream into backoff when
       // it restarts so set the stream state to Initial instead of Error.
+      Logger.debug("Ben_Firebase", "AbstractStream handleIdleCloseTimer");
       close(State.Initial, Status.OK);
     }
   }
@@ -391,6 +393,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   void handleServerClose(Status status) {
     hardAssert(isStarted(), "Can't handle server close on non-started stream!");
 
+    Logger.debug("Ben_Firebase", "AbstractStream handleServerClose");
     // In theory the stream could close cleanly, however, in our current model we never expect this
     // to happen because if we stop a stream ourselves, this callback will never be called. To
     // prevent cases where we retry without a backoff accidentally, we set the stream to error
@@ -409,6 +412,8 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   private void performBackoff() {
     hardAssert(state == State.Error, "Should only perform backoff in an error state");
     state = State.Backoff;
+
+    Logger.debug("Ben_Firebase", "AbstractStream performBackoff");
 
     backoff.backoffAndRun(
         () -> {

@@ -20,6 +20,7 @@ import com.google.firebase.firestore.local.TargetData;
 import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.util.AsyncQueue;
 import com.google.firebase.firestore.util.AsyncQueue.TimerId;
+import com.google.firebase.firestore.util.Logger;
 import com.google.firestore.v1.FirestoreGrpc;
 import com.google.firestore.v1.ListenRequest;
 import com.google.firestore.v1.ListenResponse;
@@ -83,6 +84,8 @@ public class WatchStream
       request.putAllLabels(labels);
     }
 
+    Logger.debug("Ben_Firebase", "WatchStream watchQuery");
+
     writeRequest(request.build());
   }
 
@@ -102,6 +105,8 @@ public class WatchStream
   public void onNext(com.google.firestore.v1.ListenResponse listenResponse) {
     // A successful response means the stream is healthy
     backoff.reset();
+
+    Logger.debug("Ben_Firebase", "WatchStream onNext");
 
     WatchChange watchChange = serializer.decodeWatchChange(listenResponse);
     SnapshotVersion snapshotVersion = serializer.decodeVersionFromListenResponse(listenResponse);

@@ -204,6 +204,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     ViewSnapshot viewSnapshot = initializeViewAndComputeSnapshot(query, targetData.getTargetId());
     syncEngineListener.onViewSnapshots(Collections.singletonList(viewSnapshot));
 
+    Logger.debug("Ben_Firebase", "SyncEngine listen");
+
     remoteStore.listen(targetData);
     return targetData.getTargetId();
   }

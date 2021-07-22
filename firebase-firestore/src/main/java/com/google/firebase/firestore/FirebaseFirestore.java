@@ -438,7 +438,7 @@ public class FirebaseFirestore {
    *     by the backend.
    */
   @NonNull
-  public Task<Void> waitForPendingWrites() {
+  public Task<Void> get() {
     return client.waitForPendingWrites();
   }
 
@@ -475,6 +475,7 @@ public class FirebaseFirestore {
   public static void setLoggingEnabled(boolean loggingEnabled) {
     if (loggingEnabled) {
       Logger.setLogLevel(Level.DEBUG);
+      Logger.debug("Ben", "I enabled debug!!!");
     } else {
       Logger.setLogLevel(Level.WARN);
     }

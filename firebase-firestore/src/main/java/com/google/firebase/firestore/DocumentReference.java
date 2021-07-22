@@ -41,6 +41,7 @@ import com.google.firebase.firestore.model.mutation.DeleteMutation;
 import com.google.firebase.firestore.model.mutation.Precondition;
 import com.google.firebase.firestore.util.Assert;
 import com.google.firebase.firestore.util.Executors;
+import com.google.firebase.firestore.util.Logger;
 import com.google.firebase.firestore.util.Util;
 import java.util.Collections;
 import java.util.Map;
@@ -476,10 +477,13 @@ public class DocumentReference {
       @Nullable Activity activity,
       EventListener<DocumentSnapshot> userListener) {
 
+    Logger.debug("Ben_Firebase", "addSnapshotListenerInternal");
+
     // Convert from ViewSnapshots to DocumentSnapshots.
     EventListener<ViewSnapshot> viewListener =
         (snapshot, error) -> {
           if (error != null) {
+            Logger.debug("Ben_Firebase", "addSnapshotListenerInternal error");
             userListener.onEvent(null, error);
             return;
           }
@@ -493,6 +497,9 @@ public class DocumentReference {
           DocumentSnapshot documentSnapshot;
           if (document != null) {
             boolean hasPendingWrites = snapshot.getMutatedKeys().contains(document.getKey());
+
+            Logger.debug("Ben_Firebase", "addSnapshotListenerInternal document hasPendingWrites: " + hasPendingWrites);
+
             documentSnapshot =
                 DocumentSnapshot.fromDocument(
                     firestore, document, snapshot.isFromCache(), hasPendingWrites);
