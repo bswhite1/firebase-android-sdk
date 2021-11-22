@@ -32,6 +32,7 @@ import com.google.firebase.crashlytics.internal.Logger;
 import com.google.firebase.crashlytics.internal.NativeSessionFileProvider;
 import com.google.firebase.crashlytics.internal.analytics.AnalyticsEventLogger;
 import com.google.firebase.crashlytics.internal.log.LogFileManager;
+import com.google.firebase.crashlytics.internal.model.StaticSessionData;
 import com.google.firebase.crashlytics.internal.persistence.FileStore;
 import com.google.firebase.crashlytics.internal.settings.SettingsDataProvider;
 import com.google.firebase.crashlytics.internal.settings.model.AppSettingsData;
@@ -42,6 +43,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.SortedSet;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
@@ -76,10 +78,8 @@ class CrashlyticsController {
 
   private final AppData appData;
 
-  private final LogFileManager.DirectoryProvider logFileDirectoryProvider;
   private final LogFileManager logFileManager;
   private final CrashlyticsNativeComponent nativeComponent;
-  private final String unityVersion;
   private final AnalyticsEventLogger analyticsEventLogger;
   private final SessionReportingCoordinator reportingCoordinator;
 
@@ -102,7 +102,7 @@ class CrashlyticsController {
   final AtomicBoolean checkForUnsentReportsCalled = new AtomicBoolean(false);
 
   CrashlyticsController(
-      final Context context,
+      Context context,
       CrashlyticsBackgroundWorker backgroundWorker,
       IdManager idManager,
       DataCollectionArbiter dataCollectionArbiter,
@@ -111,7 +111,6 @@ class CrashlyticsController {
       AppData appData,
       UserMetadata userMetadata,
       LogFileManager logFileManager,
-      LogFileManager.DirectoryProvider logFileDirectoryProvider,
       SessionReportingCoordinator sessionReportingCoordinator,
       CrashlyticsNativeComponent nativeComponent,
       AnalyticsEventLogger analyticsEventLogger) {
@@ -124,9 +123,7 @@ class CrashlyticsController {
     this.appData = appData;
     this.userMetadata = userMetadata;
     this.logFileManager = logFileManager;
-    this.logFileDirectoryProvider = logFileDirectoryProvider;
     this.nativeComponent = nativeComponent;
-    this.unityVersion = appData.unityVersionProvider.getUnityVersion();
     this.analyticsEventLogger = analyticsEventLogger;
 
     this.reportingCoordinator = sessionReportingCoordinator;
@@ -155,7 +152,8 @@ class CrashlyticsController {
           }
         };
     crashHandler =
-        new CrashlyticsUncaughtExceptionHandler(crashListener, settingsProvider, defaultHandler);
+        new CrashlyticsUncaughtExceptionHandler(
+            crashListener, settingsProvider, defaultHandler, nativeComponent);
     Thread.setDefaultUncaughtExceptionHandler(crashHandler);
   }
 
@@ -476,7 +474,7 @@ class CrashlyticsController {
               return null;
             }
             reportingCoordinator.persistUserId(currentSessionId);
-            new MetaDataStore(getFilesDir()).writeUserData(currentSessionId, userMetaData);
+            new MetaDataStore(fileStore).writeUserData(currentSessionId, userMetaData);
             return null;
           }
         });
@@ -495,7 +493,7 @@ class CrashlyticsController {
           @Override
           public Void call() throws Exception {
             final String currentSessionId = getCurrentSessionId();
-            new MetaDataStore(getFilesDir()).writeKeyData(currentSessionId, keyData, isInternal);
+            new MetaDataStore(fileStore).writeKeyData(currentSessionId, keyData, isInternal);
             return null;
           }
         });
@@ -525,8 +523,8 @@ class CrashlyticsController {
    */
   @Nullable
   private String getCurrentSessionId() {
-    final List<String> sortedOpenSessions = reportingCoordinator.listSortedOpenSessionIds();
-    return (!sortedOpenSessions.isEmpty()) ? sortedOpenSessions.get(0) : null;
+    final SortedSet<String> sortedOpenSessions = reportingCoordinator.listSortedOpenSessionIds();
+    return (!sortedOpenSessions.isEmpty()) ? sortedOpenSessions.first() : null;
   }
 
   /**
@@ -569,14 +567,20 @@ class CrashlyticsController {
 
     Logger.getLogger().d("Opening a new session with ID " + sessionIdentifier);
 
-    nativeComponent.openSession(sessionIdentifier);
+    final String generator =
+        String.format(Locale.US, GENERATOR_FORMAT, CrashlyticsCore.getVersion());
 
-    writeBeginSession(sessionIdentifier, startedAtSeconds);
-    writeSessionApp(sessionIdentifier);
-    writeSessionOS(sessionIdentifier);
-    writeSessionDevice(sessionIdentifier);
+    StaticSessionData.AppData appData = createAppData(idManager, this.appData);
+    StaticSessionData.OsData osData = createOsData(getContext());
+    StaticSessionData.DeviceData deviceData = createDeviceData(getContext());
+
+    nativeComponent.prepareNativeSession(
+        sessionIdentifier,
+        generator,
+        startedAtSeconds,
+        StaticSessionData.create(appData, osData, deviceData));
+
     logFileManager.setCurrentSession(sessionIdentifier);
-
     reportingCoordinator.onBeginSession(sessionIdentifier, startedAtSeconds);
   }
 
@@ -592,7 +596,9 @@ class CrashlyticsController {
       boolean skipCurrentSession, SettingsDataProvider settingsDataProvider) {
     final int offset = skipCurrentSession ? 1 : 0;
 
-    List<String> sortedOpenSessions = reportingCoordinator.listSortedOpenSessionIds();
+    // :TODO HW2021 this implementation can be cleaned up.
+    List<String> sortedOpenSessions =
+        new ArrayList<>(reportingCoordinator.listSortedOpenSessionIds());
 
     if (sortedOpenSessions.size() <= offset) {
       Logger.getLogger().v("No open sessions to be closed.");
@@ -602,18 +608,15 @@ class CrashlyticsController {
     final String mostRecentSessionIdToClose = sortedOpenSessions.get(offset);
 
     if (settingsDataProvider.getSettings().getFeaturesData().collectAnrs) {
-      // TODO: Consider writing applicationExitInfo for all sessions instead of just the most recent
-      // sessionId to close.
       writeApplicationExitInfoEventIfRelevant(mostRecentSessionIdToClose);
+    } else {
+      Logger.getLogger().v("ANR feature disabled.");
     }
 
     if (nativeComponent.hasCrashDataForSession(mostRecentSessionIdToClose)) {
       // We only finalize the current session if it's a Java crash, so only finalize native crash
       // data when we aren't including current.
       finalizePreviousNativeSession(mostRecentSessionIdToClose);
-      if (!nativeComponent.finalizeSession(mostRecentSessionIdToClose)) {
-        Logger.getLogger().w("Could not finalize native session: " + mostRecentSessionIdToClose);
-      }
     }
 
     String currentSessionId = null;
@@ -626,29 +629,9 @@ class CrashlyticsController {
 
   // endregion
 
-  // region File management
-
-  File[] listNativeSessionFileDirectories() {
-    return ensureFileArrayNotNull(getNativeSessionFilesDir().listFiles());
+  List<File> listAppExceptionMarkerFiles() {
+    return fileStore.getCommonFiles(APP_EXCEPTION_MARKER_FILTER);
   }
-
-  File[] listAppExceptionMarkerFiles() {
-    return listFilesMatching(APP_EXCEPTION_MARKER_FILTER);
-  }
-
-  private File[] listFilesMatching(FilenameFilter filter) {
-    return listFilesMatching(getFilesDir(), filter);
-  }
-
-  private static File[] listFilesMatching(File directory, FilenameFilter filter) {
-    return ensureFileArrayNotNull(directory.listFiles(filter));
-  }
-
-  private static File[] ensureFileArrayNotNull(File[] files) {
-    return (files == null) ? new File[] {} : files;
-  }
-
-  // endregion
 
   private void finalizePreviousNativeSession(String previousSessionId) {
     Logger.getLogger().v("Finalizing native report for session " + previousSessionId);
@@ -663,10 +646,10 @@ class CrashlyticsController {
     final long eventTime = minidumpFile.lastModified();
 
     final LogFileManager previousSessionLogManager =
-        new LogFileManager(context, logFileDirectoryProvider, previousSessionId);
-    final File nativeSessionDirectory = new File(getNativeSessionFilesDir(), previousSessionId);
+        new LogFileManager(fileStore, previousSessionId);
+    final File nativeSessionDirectory = fileStore.getNativeSessionDir(previousSessionId);
 
-    if (!nativeSessionDirectory.mkdirs()) {
+    if (!nativeSessionDirectory.isDirectory()) {
       Logger.getLogger().w("Couldn't create directory to store native session files, aborting.");
       return;
     }
@@ -676,9 +659,12 @@ class CrashlyticsController {
         getNativeSessionFiles(
             nativeSessionFileProvider,
             previousSessionId,
-            getFilesDir(),
+            fileStore,
             previousSessionLogManager.getBytesForLog());
     NativeSessionFileGzipper.processNativeSessions(nativeSessionDirectory, nativeSessionFiles);
+
+    Logger.getLogger().d("CrashlyticsController#finalizePreviousNativeSession");
+
     reportingCoordinator.finalizeSessionWithNativeEvent(previousSessionId, nativeSessionFiles);
     previousSessionLogManager.clearLog();
   }
@@ -695,70 +681,44 @@ class CrashlyticsController {
 
   private void doWriteAppExceptionMarker(long eventTime) {
     try {
-      new File(getFilesDir(), APP_EXCEPTION_MARKER_PREFIX + eventTime).createNewFile();
+      if (!fileStore.getCommonFile(APP_EXCEPTION_MARKER_PREFIX + eventTime).createNewFile()) {
+        throw new IOException("Create new file failed.");
+      }
     } catch (IOException e) {
       Logger.getLogger().w("Could not create app exception marker file.", e);
     }
   }
 
-  private void writeBeginSession(final String sessionId, final long startedAtSeconds) {
-    final String generator =
-        String.format(Locale.US, GENERATOR_FORMAT, CrashlyticsCore.getVersion());
-
-    nativeComponent.writeBeginSession(sessionId, generator, startedAtSeconds);
+  private static StaticSessionData.AppData createAppData(IdManager idManager, AppData appData) {
+    return StaticSessionData.AppData.create(
+        idManager.getAppIdentifier(),
+        appData.versionCode,
+        appData.versionName,
+        idManager.getCrashlyticsInstallId(),
+        DeliveryMechanism.determineFrom(appData.installerPackageName).getId(),
+        appData.developmentPlatform,
+        appData.developmentPlatformVersion);
   }
 
-  private void writeSessionApp(String sessionId) {
-    final String appIdentifier = idManager.getAppIdentifier();
-    final String versionCode = appData.versionCode;
-    final String versionName = appData.versionName;
-    final String installUuid = idManager.getCrashlyticsInstallId();
-    final int deliveryMechanism =
-        DeliveryMechanism.determineFrom(appData.installerPackageName).getId();
-
-    nativeComponent.writeSessionApp(
-        sessionId,
-        appIdentifier,
-        versionCode,
-        versionName,
-        installUuid,
-        deliveryMechanism,
-        unityVersion);
+  private static StaticSessionData.OsData createOsData(Context context) {
+    return StaticSessionData.OsData.create(
+        VERSION.RELEASE, VERSION.CODENAME, CommonUtils.isRooted(context));
   }
 
-  private void writeSessionOS(String sessionId) {
-    final String osRelease = VERSION.RELEASE;
-    final String osCodeName = VERSION.CODENAME;
-    final boolean isRooted = CommonUtils.isRooted(getContext());
-
-    nativeComponent.writeSessionOs(sessionId, osRelease, osCodeName, isRooted);
-  }
-
-  private void writeSessionDevice(String sessionId) {
-    final Context context = getContext();
+  private static StaticSessionData.DeviceData createDeviceData(Context context) {
     final StatFs statFs = new StatFs(Environment.getDataDirectory().getPath());
-
-    final int arch = CommonUtils.getCpuArchitectureInt();
-    final String model = Build.MODEL;
-    final int availableProcessors = Runtime.getRuntime().availableProcessors();
-    final long totalRam = CommonUtils.getTotalRamInBytes();
     final long diskSpace = (long) statFs.getBlockCount() * (long) statFs.getBlockSize();
-    final boolean isEmulator = CommonUtils.isEmulator(context);
-    final int state = CommonUtils.getDeviceState(context);
-    final String manufacturer = Build.MANUFACTURER;
-    final String modelClass = Build.PRODUCT;
 
-    nativeComponent.writeSessionDevice(
-        sessionId,
-        arch,
-        model,
-        availableProcessors,
-        totalRam,
+    return StaticSessionData.DeviceData.create(
+        CommonUtils.getCpuArchitectureInt(),
+        Build.MODEL,
+        Runtime.getRuntime().availableProcessors(),
+        CommonUtils.getTotalRamInBytes(),
         diskSpace,
-        isEmulator,
-        state,
-        manufacturer,
-        modelClass);
+        CommonUtils.isEmulator(context),
+        CommonUtils.getDeviceState(context),
+        Build.MANUFACTURER,
+        Build.PRODUCT);
   }
 
   // endregion
@@ -773,12 +733,8 @@ class CrashlyticsController {
     return crashHandler != null && crashHandler.isHandlingException();
   }
 
-  File getFilesDir() {
-    return fileStore.getFilesDir();
-  }
-
-  File getNativeSessionFilesDir() {
-    return new File(getFilesDir(), NATIVE_SESSION_DIR);
+  FileStore getFileStore() {
+    return fileStore;
   }
 
   /**
@@ -787,9 +743,9 @@ class CrashlyticsController {
    * will not be lost.
    */
   private Task<Void> logAnalyticsAppExceptionEvents() {
-    final List<Task<Void>> events = new ArrayList<>();
+    List<Task<Void>> events = new ArrayList<>();
 
-    final File[] appExceptionMarkers = listAppExceptionMarkerFiles();
+    List<File> appExceptionMarkers = listAppExceptionMarkerFiles();
     for (File markerFile : appExceptionMarkers) {
       try {
         final long timestamp =
@@ -828,10 +784,7 @@ class CrashlyticsController {
         });
   }
 
-  private static void deleteFiles(File[] files) {
-    if (files == null) {
-      return;
-    }
+  private static void deleteFiles(List<File> files) {
     for (File file : files) {
       file.delete();
     }
@@ -850,10 +803,10 @@ class CrashlyticsController {
   static List<NativeSessionFile> getNativeSessionFiles(
       NativeSessionFileProvider fileProvider,
       String previousSessionId,
-      File filesDir,
+      FileStore fileStore,
       byte[] logBytes) {
 
-    final MetaDataStore metaDataStore = new MetaDataStore(filesDir);
+    final MetaDataStore metaDataStore = new MetaDataStore(fileStore);
     final File userFile = metaDataStore.getUserDataFileForSession(previousSessionId);
     final File keysFile = metaDataStore.getKeysFileForSession(previousSessionId);
 
@@ -889,22 +842,20 @@ class CrashlyticsController {
     if (android.os.Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
       ActivityManager activityManager =
           (ActivityManager) context.getSystemService(Context.ACTIVITY_SERVICE);
-      // Gets the latest app exit info.
+      // Gets all the available app exit infos.
       List<ApplicationExitInfo> applicationExitInfoList =
-          activityManager.getHistoricalProcessExitReasons(null, 0, 1);
+          activityManager.getHistoricalProcessExitReasons(null, 0, 0);
 
       // Passes the latest applicationExitInfo to ReportCoordinator, which persists it if it
       // happened during the session.
       if (applicationExitInfoList.size() != 0) {
-        final LogFileManager relevantSessionLogManager =
-            new LogFileManager(context, logFileDirectoryProvider, sessionId);
+        final LogFileManager relevantSessionLogManager = new LogFileManager(fileStore, sessionId);
         final UserMetadata relevantUserMetadata = new UserMetadata();
-        relevantUserMetadata.setCustomKeys(new MetaDataStore(getFilesDir()).readKeyData(sessionId));
-        reportingCoordinator.persistAppExitInfoEvent(
-            sessionId,
-            applicationExitInfoList.get(0),
-            relevantSessionLogManager,
-            relevantUserMetadata);
+        relevantUserMetadata.setCustomKeys(new MetaDataStore(fileStore).readKeyData(sessionId));
+        reportingCoordinator.persistRelevantAppExitInfoEvent(
+            sessionId, applicationExitInfoList, relevantSessionLogManager, relevantUserMetadata);
+      } else {
+        Logger.getLogger().v("No ApplicationExitInfo available. Session: " + sessionId);
       }
     } else {
       Logger.getLogger()

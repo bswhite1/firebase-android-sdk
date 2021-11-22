@@ -14,8 +14,16 @@
 
 package com.google.firebase.firestore.local;
 
+import androidx.annotation.Nullable;
+import com.google.firebase.Timestamp;
+import com.google.firebase.firestore.core.Target;
+import com.google.firebase.firestore.model.Document;
+import com.google.firebase.firestore.model.DocumentKey;
+import com.google.firebase.firestore.model.FieldIndex;
 import com.google.firebase.firestore.model.ResourcePath;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Represents a set of indexes that are used to execute queries efficiently.
@@ -24,6 +32,10 @@ import java.util.List;
  * Collection Group queries.
  */
 public interface IndexManager {
+
+  /** Initializes the IndexManager. */
+  void start();
+
   /**
    * Creates an index entry mapping the collectionId (last segment of the path) to the parent path
    * (either the containing document location or the empty path for root-level collections). Index
@@ -39,4 +51,50 @@ public interface IndexManager {
    * being either a document location or the empty path for a root-level collection).
    */
   List<ResourcePath> getCollectionParents(String collectionId);
+
+  /** Updates the index entries for the given document. */
+  void handleDocumentChange(@Nullable Document oldDocument, @Nullable Document newDocument);
+
+  /**
+   * Adds a field path index.
+   *
+   * <p>Values for this index are persisted asynchronously. The index will only be used for query
+   * execution once values are persisted.
+   */
+  void addFieldIndex(FieldIndex index);
+
+  /** Removes the given field index and deletes all index values. */
+  void deleteFieldIndex(FieldIndex index);
+
+  /**
+   * Returns a list of field indexes that correspond to the specified collection group.
+   *
+   * @param collectionGroup The collection group to get matching field indexes for.
+   * @return A collection of field indexes for the specified collection group.
+   */
+  Collection<FieldIndex> getFieldIndexes(String collectionGroup);
+
+  /** Returns all configured field indexes. */
+  Collection<FieldIndex> getFieldIndexes();
+
+  /**
+   * Returns an index that can be used to serve the provided target. Returns {@code null} if no
+   * index is configured.
+   */
+  @Nullable
+  FieldIndex getFieldIndex(Target target);
+
+  /** Returns the documents that match the given target based on the provided index. */
+  Set<DocumentKey> getDocumentsMatchingTarget(FieldIndex fieldIndex, Target target);
+
+  /** Returns the next collection group to update. */
+  @Nullable
+  String getNextCollectionGroupToUpdate(Timestamp lastUpdateTime);
+
+  /**
+   * Updates the index entries for the provided documents and corresponding field indexes until the
+   * cap is reached. Updates the field indexes in persistence with the latest read time that was
+   * processed.
+   */
+  void updateIndexEntries(Collection<Document> documents);
 }

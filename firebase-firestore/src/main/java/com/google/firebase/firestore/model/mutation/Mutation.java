@@ -16,16 +16,17 @@ package com.google.firebase.firestore.model.mutation;
 
 import static com.google.firebase.firestore.util.Assert.hardAssert;
 
+import androidx.annotation.Nullable;
 import com.google.firebase.Timestamp;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.FieldPath;
 import com.google.firebase.firestore.model.MutableDocument;
 import com.google.firebase.firestore.model.ObjectValue;
-import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firestore.v1.Value;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
@@ -81,6 +82,50 @@ public abstract class Mutation {
     this.fieldTransforms = fieldTransforms;
   }
 
+  /**
+   * A utility method to calculate an {@link Mutation} representing the overlay from the final state
+   * of the document, and a {@link FieldMask} representing the fields that are mutated by the local
+   * mutations.
+   */
+  public static Mutation calculateOverlayMutation(MutableDocument doc, @Nullable FieldMask mask) {
+    if ((!doc.hasLocalMutations()) || (mask != null && mask.getMask().isEmpty())) {
+      return null;
+    }
+
+    // mask == null when there are Set or Delete being applied to get to the current document.
+    if (mask == null) {
+      if (doc.isNoDocument()) {
+        return new DeleteMutation(doc.getKey(), Precondition.NONE);
+      } else {
+        return new SetMutation(doc.getKey(), doc.getData(), Precondition.NONE);
+      }
+    } else {
+      ObjectValue docValue = doc.getData();
+      ObjectValue patchValue = new ObjectValue();
+      HashSet<FieldPath> maskSet = new HashSet<>();
+      for (FieldPath path : mask.getMask()) {
+        if (!maskSet.contains(path)) {
+          Value value = docValue.get(path);
+          // If we are deleting a nested field, we take the immediate parent as the mask used to
+          // construct resulting mutation.
+          // Justification: Nested fields can create parent fields implicitly. If only a leaf entry
+          // is deleted in later mutations, the parent field should still remain, but we may have
+          // lost this information.
+          // Consider mutation (foo.bar 1), then mutation (foo.bar delete()).
+          // This leaves the final result (foo, {}). Despite the fact that `doc` has the correct
+          // result, `foo` is not in `mask`, and the resulting mutation would miss `foo`.
+          if (value == null && path.length() > 1) {
+            path = path.popLast();
+          }
+          patchValue.set(path, docValue.get(path));
+          maskSet.add(path);
+        }
+      }
+      return new PatchMutation(
+          doc.getKey(), patchValue, FieldMask.fromSet(maskSet), Precondition.NONE);
+    }
+  }
+
   public DocumentKey getKey() {
     return key;
   }
@@ -110,10 +155,13 @@ public abstract class Mutation {
    * modified.
    *
    * @param document The document to mutate.
+   * @param previousMask The fields that have been updated before applying this mutation.
    * @param localWriteTime A timestamp indicating the local write time of the batch this mutation is
    *     a part of.
+   * @return A {@code FieldMask} representing the fields that are changed by applying this mutation.
    */
-  public abstract void applyToLocalView(MutableDocument document, Timestamp localWriteTime);
+  public abstract @Nullable FieldMask applyToLocalView(
+      MutableDocument document, @Nullable FieldMask previousMask, Timestamp localWriteTime);
 
   /** Helper for derived classes to implement .equals(). */
   boolean hasSameKeyAndPrecondition(Mutation other) {
@@ -134,19 +182,6 @@ public abstract class Mutation {
     hardAssert(
         document.getKey().equals(getKey()),
         "Can only apply a mutation to a document with the same key");
-  }
-
-  /**
-   * Returns the version from the given document for use as the result of a mutation. Mutations are
-   * defined to return the version of the base document only if it is an existing document. Deleted
-   * and unknown documents have a post-mutation version of {@code SnapshotVersion.NONE}.
-   */
-  static SnapshotVersion getPostMutationVersion(MutableDocument document) {
-    if (document.isFoundDocument()) {
-      return document.getVersion();
-    } else {
-      return SnapshotVersion.NONE;
-    }
   }
 
   /**
@@ -183,7 +218,7 @@ public abstract class Mutation {
    * result of applying a transform) for use when applying a transform locally.
    *
    * @param localWriteTime The local time of the mutation (used to generate ServerTimestampValues).
-   * @param mutableDocument The current state of the document after applying all previous mutations.
+   * @param mutableDocument The document to apply transforms on.
    * @return A map of fields to transform results.
    */
   protected Map<FieldPath, Value> localTransformResults(

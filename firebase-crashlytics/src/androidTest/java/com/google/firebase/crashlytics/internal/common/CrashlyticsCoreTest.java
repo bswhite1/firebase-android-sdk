@@ -14,7 +14,10 @@
 
 package com.google.firebase.crashlytics.internal.common;
 
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import android.content.Context;
 import android.text.TextUtils;
@@ -27,16 +30,17 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.crashlytics.BuildConfig;
 import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponent;
+import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponentDeferredProxy;
 import com.google.firebase.crashlytics.internal.CrashlyticsTestCase;
-import com.google.firebase.crashlytics.internal.ProviderProxyNativeComponent;
 import com.google.firebase.crashlytics.internal.analytics.UnavailableAnalyticsEventLogger;
 import com.google.firebase.crashlytics.internal.breadcrumbs.BreadcrumbHandler;
 import com.google.firebase.crashlytics.internal.breadcrumbs.BreadcrumbSource;
 import com.google.firebase.crashlytics.internal.breadcrumbs.DisabledBreadcrumbSource;
+import com.google.firebase.crashlytics.internal.persistence.FileStore;
 import com.google.firebase.crashlytics.internal.settings.SettingsController;
 import com.google.firebase.crashlytics.internal.settings.TestSettingsData;
 import com.google.firebase.crashlytics.internal.settings.model.SettingsData;
-import com.google.firebase.crashlytics.internal.unity.UnityVersionProvider;
+import com.google.firebase.inject.Deferred;
 import com.google.firebase.installations.FirebaseInstallationsApi;
 import java.util.HashMap;
 import java.util.Map;
@@ -48,7 +52,14 @@ public class CrashlyticsCoreTest extends CrashlyticsTestCase {
   private static final String GOOGLE_APP_ID = "google:app:id";
 
   private static final CrashlyticsNativeComponent MISSING_NATIVE_COMPONENT =
-      new ProviderProxyNativeComponent(() -> null);
+      new CrashlyticsNativeComponentDeferredProxy(
+          new Deferred<CrashlyticsNativeComponent>() {
+            @Override
+            public void whenAvailable(
+                @NonNull Deferred.DeferredHandler<CrashlyticsNativeComponent> handler) {
+              // no-op
+            }
+          });
 
   private CrashlyticsCore crashlyticsCore;
   private BreadcrumbSource mockBreadcrumbSource;
@@ -324,9 +335,6 @@ public class CrashlyticsCoreTest extends CrashlyticsTestCase {
     when(mockSettingsController.getSettings()).thenReturn(settings);
     when(mockSettingsController.getAppSettings()).thenReturn(Tasks.forResult(settings.appData));
 
-    final UnityVersionProvider unityVersionProvider = mock(UnityVersionProvider.class);
-    when(unityVersionProvider.getUnityVersion()).thenReturn("1.0");
-
     AppData appData =
         new AppData(
             GOOGLE_APP_ID,
@@ -335,7 +343,8 @@ public class CrashlyticsCoreTest extends CrashlyticsTestCase {
             "packageName",
             "versionCode",
             "versionName",
-            unityVersionProvider);
+            "Unity",
+            "1.0");
 
     crashlyticsCore.onPreExecute(appData, mockSettingsController);
 
@@ -404,6 +413,7 @@ public class CrashlyticsCoreTest extends CrashlyticsTestCase {
               arbiter,
               breadcrumbSource,
               new UnavailableAnalyticsEventLogger(),
+              new FileStore(context),
               new SameThreadExecutorService());
       return crashlyticsCore;
     }

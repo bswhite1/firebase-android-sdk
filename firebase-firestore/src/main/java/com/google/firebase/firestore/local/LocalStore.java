@@ -15,9 +15,11 @@
 package com.google.firebase.firestore.local;
 
 import static com.google.firebase.firestore.util.Assert.hardAssert;
+import static com.google.firebase.firestore.util.Util.diffCollections;
 import static java.util.Arrays.asList;
 
 import android.util.SparseArray;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import com.google.firebase.Timestamp;
@@ -32,6 +34,7 @@ import com.google.firebase.firestore.core.Target;
 import com.google.firebase.firestore.core.TargetIdGenerator;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
+import com.google.firebase.firestore.model.FieldIndex;
 import com.google.firebase.firestore.model.MutableDocument;
 import com.google.firebase.firestore.model.ObjectValue;
 import com.google.firebase.firestore.model.ResourcePath;
@@ -39,6 +42,7 @@ import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.model.mutation.Mutation;
 import com.google.firebase.firestore.model.mutation.MutationBatch;
 import com.google.firebase.firestore.model.mutation.MutationBatchResult;
+import com.google.firebase.firestore.model.mutation.MutationResult;
 import com.google.firebase.firestore.model.mutation.PatchMutation;
 import com.google.firebase.firestore.model.mutation.Precondition;
 import com.google.firebase.firestore.remote.RemoteEvent;
@@ -46,6 +50,7 @@ import com.google.firebase.firestore.remote.TargetChange;
 import com.google.firebase.firestore.util.Logger;
 import com.google.protobuf.ByteString;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -106,8 +111,17 @@ public final class LocalStore implements BundleCallback {
   /** Manages our in-memory or durable persistence. */
   private final Persistence persistence;
 
+  /** Manages the list of active field and collection indices. */
+  private IndexManager indexManager;
+
+  /** Manages field index backfill. */
+  private final IndexBackfiller indexBackfiller;
+
   /** The set of all mutations that have been sent but not yet been applied to the backend. */
   private MutationQueue mutationQueue;
+
+  /** The overlays that can be used to short circuit applying all mutations from mutation queue. */
+  private DocumentOverlayCache documentOverlayCache;
 
   /** The last known state of all referenced documents according to the backend. */
   private final RemoteDocumentCache remoteDocuments;
@@ -136,38 +150,50 @@ public final class LocalStore implements BundleCallback {
   /** Used to generate targetIds for queries tracked locally. */
   private final TargetIdGenerator targetIdGenerator;
 
-  public LocalStore(Persistence persistence, QueryEngine queryEngine, User initialUser) {
+  public LocalStore(
+      Persistence persistence,
+      IndexBackfiller indexBackfiller,
+      QueryEngine queryEngine,
+      User initialUser) {
     hardAssert(
         persistence.isStarted(), "LocalStore was passed an unstarted persistence implementation");
     this.persistence = persistence;
     targetCache = persistence.getTargetCache();
     bundleCache = persistence.getBundleCache();
     targetIdGenerator = TargetIdGenerator.forTargetCache(targetCache.getHighestTargetId());
-    mutationQueue = persistence.getMutationQueue(initialUser);
+    indexManager = persistence.getIndexManager(initialUser);
+    mutationQueue = persistence.getMutationQueue(initialUser, indexManager);
+    documentOverlayCache = persistence.getDocumentOverlay(initialUser);
     remoteDocuments = persistence.getRemoteDocumentCache();
     localDocuments =
-        new LocalDocumentsView(remoteDocuments, mutationQueue, persistence.getIndexManager());
-
+        new LocalDocumentsView(remoteDocuments, mutationQueue, documentOverlayCache, indexManager);
     this.queryEngine = queryEngine;
+    this.indexBackfiller = indexBackfiller;
     queryEngine.setLocalDocumentsView(localDocuments);
 
     localViewReferences = new ReferenceSet();
     persistence.getReferenceDelegate().setInMemoryPins(localViewReferences);
+
+    remoteDocuments.setIndexManager(indexManager);
+    indexBackfiller.setIndexManager(indexManager);
+    indexBackfiller.setLocalDocumentsView(localDocuments);
 
     queryDataByTarget = new SparseArray<>();
     targetIdByTarget = new HashMap<>();
   }
 
   public void start() {
+    persistence.getOverlayMigrationManager().run();
+    startIndexManager();
     startMutationQueue();
   }
 
+  private void startIndexManager() {
+    persistence.runTransaction("Start IndexManager", () -> indexManager.start());
+  }
+
   private void startMutationQueue() {
-    persistence.runTransaction(
-        "Start MutationQueue",
-        () -> {
-          mutationQueue.start();
-        });
+    persistence.runTransaction("Start MutationQueue", () -> mutationQueue.start());
   }
 
   // PORTING NOTE: no shutdown for LocalStore or persistence components on Android.
@@ -176,15 +202,25 @@ public final class LocalStore implements BundleCallback {
     // Swap out the mutation queue, grabbing the pending mutation batches before and after.
     List<MutationBatch> oldBatches = mutationQueue.getAllMutationBatches();
 
-    mutationQueue = persistence.getMutationQueue(user);
+    indexManager = persistence.getIndexManager(user);
+    mutationQueue = persistence.getMutationQueue(user, indexManager);
+    documentOverlayCache = persistence.getDocumentOverlay(user);
+
+    startIndexManager();
     startMutationQueue();
 
     List<MutationBatch> newBatches = mutationQueue.getAllMutationBatches();
 
     // Recreate our LocalDocumentsView using the new MutationQueue.
     localDocuments =
-        new LocalDocumentsView(remoteDocuments, mutationQueue, persistence.getIndexManager());
+        new LocalDocumentsView(remoteDocuments, mutationQueue, documentOverlayCache, indexManager);
     queryEngine.setLocalDocumentsView(localDocuments);
+    queryEngine.setIndexManager(indexManager);
+
+    // TODO(indexing): Add spec tests that test these components change after a user change
+    remoteDocuments.setIndexManager(indexManager);
+    indexBackfiller.setIndexManager(indexManager);
+    indexBackfiller.setLocalDocumentsView(localDocuments);
 
     // Union the old/new changed keys.
     ImmutableSortedSet<DocumentKey> changedKeys = DocumentKey.emptyKeySet();
@@ -240,7 +276,10 @@ public final class LocalStore implements BundleCallback {
 
           MutationBatch batch =
               mutationQueue.addMutationBatch(localWriteTime, baseMutations, mutations);
-          batch.applyToLocalDocumentSet(documents);
+          Map<DocumentKey, Mutation> overlays = batch.applyToLocalDocumentSet(documents);
+          if (Persistence.OVERLAY_SUPPORT_ENABLED) {
+            documentOverlayCache.saveOverlays(batch.getBatchId(), overlays);
+          }
           return new LocalWriteResult(batch.getBatchId(), documents);
         });
   }
@@ -269,8 +308,27 @@ public final class LocalStore implements BundleCallback {
           mutationQueue.acknowledgeBatch(batch, batchResult.getStreamToken());
           applyWriteToRemoteDocuments(batchResult);
           mutationQueue.performConsistencyCheck();
+
+          if (Persistence.OVERLAY_SUPPORT_ENABLED) {
+            documentOverlayCache.removeOverlaysForBatchId(batchResult.getBatch().getBatchId());
+            localDocuments.recalculateAndSaveOverlays(getKeysWithTransformResults(batchResult));
+          }
+
           return localDocuments.getDocuments(batch.getKeys());
         });
+  }
+
+  @NonNull
+  private Set<DocumentKey> getKeysWithTransformResults(MutationBatchResult batchResult) {
+    Set<DocumentKey> result = new HashSet<>();
+
+    for (int i = 0; i < batchResult.getMutationResults().size(); ++i) {
+      MutationResult mutationResult = batchResult.getMutationResults().get(i);
+      if (!mutationResult.getTransformResults().isEmpty()) {
+        result.add(batchResult.getBatch().getMutations().get(i).getKey());
+      }
+    }
+    return result;
   }
 
   /**
@@ -290,6 +348,12 @@ public final class LocalStore implements BundleCallback {
 
           mutationQueue.removeMutationBatch(toReject);
           mutationQueue.performConsistencyCheck();
+
+          if (Persistence.OVERLAY_SUPPORT_ENABLED) {
+            documentOverlayCache.removeOverlaysForBatchId(batchId);
+            localDocuments.recalculateAndSaveOverlays(toReject.getKeys());
+          }
+
           return localDocuments.getDocuments(toReject.getKeys());
         });
   }
@@ -386,8 +450,9 @@ public final class LocalStore implements BundleCallback {
             }
           }
 
-          Map<DocumentKey, MutableDocument> changedDocs =
+          DocumentChangeResult result =
               populateDocumentChanges(documentUpdates, null, remoteEvent.getSnapshotVersion());
+          Map<DocumentKey, MutableDocument> changedDocs = result.changedDocuments;
 
           // HACK: The only reason we allow snapshot version NONE is so that we can synthesize
           // remote events when we get permission denied errors while trying to resolve the
@@ -402,13 +467,25 @@ public final class LocalStore implements BundleCallback {
             targetCache.setLastRemoteSnapshotVersion(remoteVersion);
           }
 
-          return localDocuments.getLocalViewOfDocuments(changedDocs);
+          return localDocuments.getLocalViewOfDocuments(changedDocs, result.existenceChangedKeys);
         });
+  }
+
+  private static class DocumentChangeResult {
+    private final Map<DocumentKey, MutableDocument> changedDocuments;
+    private final Set<DocumentKey> existenceChangedKeys;
+
+    private DocumentChangeResult(
+        Map<DocumentKey, MutableDocument> changedDocuments, Set<DocumentKey> existenceChangedKeys) {
+      this.changedDocuments = changedDocuments;
+      this.existenceChangedKeys = existenceChangedKeys;
+    }
   }
 
   /**
    * Populates the remote document cache with documents from backend or a bundle. Returns the
-   * document changes resulting from applying those documents.
+   * document changes resulting from applying those documents, and also a set of documents whose
+   * existence state are changed as a result.
    *
    * <p>Note: this function will use `documentVersions` if it is defined. When it is not defined, it
    * resorts to `globalVersion`.
@@ -419,11 +496,12 @@ public final class LocalStore implements BundleCallback {
    * @param globalVersion A SnapshotVersion representing the read time if all documents have the
    *     same read time.
    */
-  private Map<DocumentKey, MutableDocument> populateDocumentChanges(
+  private DocumentChangeResult populateDocumentChanges(
       Map<DocumentKey, MutableDocument> documents,
       @Nullable Map<DocumentKey, SnapshotVersion> documentVersions,
       SnapshotVersion globalVersion) {
     Map<DocumentKey, MutableDocument> changedDocs = new HashMap<>();
+    Set<DocumentKey> conditionChanged = new HashSet<>();
 
     // Each loop iteration only affects its "own" doc, so it's safe to get all the remote
     // documents in advance in a single call.
@@ -435,6 +513,10 @@ public final class LocalStore implements BundleCallback {
       MutableDocument existingDoc = existingDocs.get(key);
       SnapshotVersion readTime =
           documentVersions != null ? documentVersions.get(key) : globalVersion;
+      // Check if see if there is a existence state change for this document.
+      if (doc.isFoundDocument() != existingDoc.isFoundDocument()) {
+        conditionChanged.add(key);
+      }
 
       // Note: The order of the steps below is important, since we want to ensure that
       // rejected limbo resolutions (which fabricate NoDocuments with SnapshotVersion.NONE)
@@ -462,7 +544,7 @@ public final class LocalStore implements BundleCallback {
             doc.getVersion());
       }
     }
-    return changedDocs;
+    return new DocumentChangeResult(changedDocs, conditionChanged);
   }
 
   /**
@@ -657,9 +739,10 @@ public final class LocalStore implements BundleCallback {
           targetCache.removeMatchingKeysForTargetId(umbrellaTargetData.getTargetId());
           targetCache.addMatchingKeys(documentKeys, umbrellaTargetData.getTargetId());
 
-          Map<DocumentKey, MutableDocument> changedDocs =
+          DocumentChangeResult result =
               populateDocumentChanges(documentMap, versionMap, SnapshotVersion.NONE);
-          return localDocuments.getLocalViewOfDocuments(changedDocs);
+          Map<DocumentKey, MutableDocument> changedDocs = result.changedDocuments;
+          return localDocuments.getLocalViewOfDocuments(changedDocs, result.existenceChangedKeys);
         });
   }
 
@@ -695,6 +778,24 @@ public final class LocalStore implements BundleCallback {
   public @Nullable NamedQuery getNamedQuery(String queryName) {
     return persistence.runTransaction(
         "Get named query", () -> bundleCache.getNamedQuery(queryName));
+  }
+
+  @VisibleForTesting
+  Collection<FieldIndex> getFieldIndexes() {
+    return persistence.runTransaction("Get indexes", () -> indexManager.getFieldIndexes());
+  }
+
+  public void configureFieldIndexes(List<FieldIndex> newFieldIndexes) {
+    persistence.runTransaction(
+        "Configure indexes",
+        () -> {
+          diffCollections(
+              indexManager.getFieldIndexes(),
+              newFieldIndexes,
+              FieldIndex.SEMANTIC_COMPARATOR,
+              indexManager::addFieldIndex,
+              indexManager::deleteFieldIndex);
+        });
   }
 
   /** Mutable state for the transaction in allocateQuery. */

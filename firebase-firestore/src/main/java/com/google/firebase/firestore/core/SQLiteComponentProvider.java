@@ -14,20 +14,19 @@
 
 package com.google.firebase.firestore.core;
 
-import com.google.firebase.firestore.local.GarbageCollectionScheduler;
 import com.google.firebase.firestore.local.LocalSerializer;
 import com.google.firebase.firestore.local.LruDelegate;
 import com.google.firebase.firestore.local.LruGarbageCollector;
 import com.google.firebase.firestore.local.Persistence;
 import com.google.firebase.firestore.local.SQLitePersistence;
+import com.google.firebase.firestore.local.Scheduler;
 import com.google.firebase.firestore.remote.RemoteSerializer;
 
 /** Provides all components needed for Firestore with SQLite persistence. */
 public class SQLiteComponentProvider extends MemoryComponentProvider {
 
   @Override
-  protected GarbageCollectionScheduler createGarbageCollectionScheduler(
-      Configuration configuration) {
+  protected Scheduler createGarbageCollectionScheduler(Configuration configuration) {
     LruDelegate lruDelegate = ((SQLitePersistence) getPersistence()).getReferenceDelegate();
     LruGarbageCollector gc = lruDelegate.getGarbageCollector();
     return gc.newScheduler(configuration.getAsyncQueue(), getLocalStore());

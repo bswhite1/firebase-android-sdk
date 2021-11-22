@@ -14,6 +14,7 @@
 
 package com.google.firebase.firestore.local;
 
+import com.google.firebase.firestore.BuildConfig;
 import com.google.firebase.firestore.auth.User;
 import com.google.firebase.firestore.util.Supplier;
 
@@ -49,9 +50,15 @@ import com.google.firebase.firestore.util.Supplier;
 public abstract class Persistence {
   static final String TAG = Persistence.class.getSimpleName();
 
+  /** Temporary setting for enabling document overlays. */
+  // TODO(Overlay): Remove this.
+  public static boolean OVERLAY_SUPPORT_ENABLED = BuildConfig.ENABLE_OVERLAY;
+  /** Constant string to indicate a data migration is required to support overlays. */
+  public static String DATA_MIGRATION_BUILD_OVERLAYS = "BUILD_OVERLAYS";
+
   /** Temporary setting for enabling indexing-specific code paths while in development. */
-  // TODO: Remove this.
-  public static boolean INDEXING_SUPPORT_ENABLED = false;
+  // TODO(Indexing): Remove this.
+  public static boolean INDEXING_SUPPORT_ENABLED = BuildConfig.ENABLE_INDEXING;
 
   // Local subclasses only, please.
   Persistence() {}
@@ -78,7 +85,7 @@ public abstract class Persistence {
    * implementation to the extent possible (e.g. in the case of uid switching from
    * sally=>jack=>sally, sally's mutation queue will be preserved).
    */
-  abstract MutationQueue getMutationQueue(User user);
+  abstract MutationQueue getMutationQueue(User user, IndexManager indexManager);
 
   /** Creates a TargetCache representing the persisted cache of queries. */
   abstract TargetCache getTargetCache();
@@ -87,10 +94,16 @@ public abstract class Persistence {
   abstract RemoteDocumentCache getRemoteDocumentCache();
 
   /** Creates an IndexManager that manages our persisted query indexes. */
-  abstract IndexManager getIndexManager();
+  abstract IndexManager getIndexManager(User user);
 
   /** Returns a BundleCache representing the persisted cache of loaded bundles. */
   abstract BundleCache getBundleCache();
+
+  /** Returns a DocumentOverlayCache representing the documents that are mutated locally. */
+  abstract DocumentOverlayCache getDocumentOverlay(User user);
+
+  /** Returns a OverlayMigrationManager that runs any pending data migration required by SDK. */
+  abstract OverlayMigrationManager getOverlayMigrationManager();
 
   /**
    * Performs an operation inside a persistence transaction. Any reads or writes against persistence

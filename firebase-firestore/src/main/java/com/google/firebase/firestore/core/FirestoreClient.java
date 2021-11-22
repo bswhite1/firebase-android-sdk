@@ -32,12 +32,14 @@ import com.google.firebase.firestore.bundle.BundleReader;
 import com.google.firebase.firestore.bundle.BundleSerializer;
 import com.google.firebase.firestore.bundle.NamedQuery;
 import com.google.firebase.firestore.core.EventManager.ListenOptions;
-import com.google.firebase.firestore.local.GarbageCollectionScheduler;
+import com.google.firebase.firestore.local.IndexBackfiller;
 import com.google.firebase.firestore.local.LocalStore;
 import com.google.firebase.firestore.local.Persistence;
 import com.google.firebase.firestore.local.QueryResult;
+import com.google.firebase.firestore.local.Scheduler;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
+import com.google.firebase.firestore.model.FieldIndex;
 import com.google.firebase.firestore.model.mutation.Mutation;
 import com.google.firebase.firestore.remote.Datastore;
 import com.google.firebase.firestore.remote.GrpcMetadataProvider;
@@ -61,7 +63,8 @@ public final class FirestoreClient {
   private static final int MAX_CONCURRENT_LIMBO_RESOLUTIONS = 100;
 
   private final DatabaseInfo databaseInfo;
-  private final CredentialsProvider credentialsProvider;
+  private final CredentialsProvider<User> authProvider;
+  private final CredentialsProvider<String> appCheckProvider;
   private final AsyncQueue asyncQueue;
   private final BundleSerializer bundleSerializer;
   private final GrpcMetadataProvider metadataProvider;
@@ -71,19 +74,22 @@ public final class FirestoreClient {
   private RemoteStore remoteStore;
   private SyncEngine syncEngine;
   private EventManager eventManager;
+  private IndexBackfiller indexBackfiller;
 
   // LRU-related
-  @Nullable private GarbageCollectionScheduler gcScheduler;
+  @Nullable private Scheduler gcScheduler;
 
   public FirestoreClient(
       final Context context,
       DatabaseInfo databaseInfo,
       FirebaseFirestoreSettings settings,
-      CredentialsProvider credentialsProvider,
+      CredentialsProvider<User> authProvider,
+      CredentialsProvider<String> appCheckProvider,
       final AsyncQueue asyncQueue,
       @Nullable GrpcMetadataProvider metadataProvider) {
     this.databaseInfo = databaseInfo;
-    this.credentialsProvider = credentialsProvider;
+    this.authProvider = authProvider;
+    this.appCheckProvider = appCheckProvider;
     this.asyncQueue = asyncQueue;
     this.metadataProvider = metadataProvider;
     this.bundleSerializer =
@@ -106,7 +112,7 @@ public final class FirestoreClient {
           }
         });
 
-    credentialsProvider.setChangeListener(
+    authProvider.setChangeListener(
         (User user) -> {
           if (initialized.compareAndSet(false, true)) {
             hardAssert(!firstUser.getTask().isComplete(), "Already fulfilled first user task");
@@ -119,6 +125,12 @@ public final class FirestoreClient {
                   syncEngine.handleCredentialChange(user);
                 });
           }
+        });
+
+    appCheckProvider.setChangeListener(
+        (String appCheckToken) -> {
+          // Register an empty credentials change listener to activate token
+          // refresh.
         });
   }
 
@@ -134,13 +146,18 @@ public final class FirestoreClient {
 
   /** Terminates this client, cancels all writes / listeners, and releases all resources. */
   public Task<Void> terminate() {
-    credentialsProvider.removeChangeListener();
+    authProvider.removeChangeListener();
+    appCheckProvider.removeChangeListener();
     return asyncQueue.enqueueAndInitiateShutdown(
         () -> {
           remoteStore.shutdown();
           persistence.shutdown();
           if (gcScheduler != null) {
             gcScheduler.stop();
+          }
+
+          if (Persistence.INDEXING_SUPPORT_ENABLED) {
+            indexBackfiller.getScheduler().stop();
           }
         });
   }
@@ -237,7 +254,8 @@ public final class FirestoreClient {
     Logger.debug(LOG_TAG, "Initializing. user=%s", user.getUid());
 
     Datastore datastore =
-        new Datastore(databaseInfo, asyncQueue, credentialsProvider, context, metadataProvider);
+        new Datastore(
+            databaseInfo, asyncQueue, authProvider, appCheckProvider, context, metadataProvider);
     ComponentProvider.Configuration configuration =
         new ComponentProvider.Configuration(
             context,
@@ -254,14 +272,19 @@ public final class FirestoreClient {
             : new MemoryComponentProvider();
     provider.initialize(configuration);
     persistence = provider.getPersistence();
-    gcScheduler = provider.getGargabeCollectionScheduler();
+    gcScheduler = provider.getGarbageCollectionScheduler();
     localStore = provider.getLocalStore();
     remoteStore = provider.getRemoteStore();
     syncEngine = provider.getSyncEngine();
     eventManager = provider.getEventManager();
+    indexBackfiller = provider.getIndexBackfiller();
 
     if (gcScheduler != null) {
       gcScheduler.start();
+    }
+
+    if (Persistence.INDEXING_SUPPORT_ENABLED && settings.isPersistenceEnabled()) {
+      indexBackfiller.getScheduler().start();
     }
   }
 
@@ -299,6 +322,11 @@ public final class FirestoreClient {
           }
         });
     return completionSource.getTask();
+  }
+
+  public Task<Void> configureFieldIndexes(List<FieldIndex> fieldIndices) {
+    verifyNotTerminated();
+    return asyncQueue.enqueue(() -> localStore.configureFieldIndexes(fieldIndices));
   }
 
   public void removeSnapshotsInSyncListener(EventListener<Void> listener) {

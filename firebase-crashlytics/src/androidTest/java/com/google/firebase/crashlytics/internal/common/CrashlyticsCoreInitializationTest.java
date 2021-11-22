@@ -23,20 +23,20 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
+import androidx.annotation.NonNull;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponent;
+import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponentDeferredProxy;
 import com.google.firebase.crashlytics.internal.CrashlyticsTestCase;
-import com.google.firebase.crashlytics.internal.ProviderProxyNativeComponent;
 import com.google.firebase.crashlytics.internal.analytics.UnavailableAnalyticsEventLogger;
 import com.google.firebase.crashlytics.internal.breadcrumbs.DisabledBreadcrumbSource;
 import com.google.firebase.crashlytics.internal.persistence.FileStore;
-import com.google.firebase.crashlytics.internal.persistence.FileStoreImpl;
 import com.google.firebase.crashlytics.internal.settings.SettingsController;
 import com.google.firebase.crashlytics.internal.settings.TestSettingsData;
 import com.google.firebase.crashlytics.internal.settings.model.SettingsData;
-import com.google.firebase.crashlytics.internal.unity.UnityVersionProvider;
+import com.google.firebase.inject.Deferred;
 import com.google.firebase.installations.FirebaseInstallationsApi;
 import java.io.File;
 import java.io.IOException;
@@ -67,9 +67,7 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
     mockResources = mock(Resources.class);
     testFirebaseOptions = new FirebaseOptions.Builder().setApplicationId(GOOGLE_APP_ID).build();
 
-    fileStore = new FileStoreImpl(getContext());
-
-    cleanSdkDirectory();
+    fileStore = new FileStore(getContext());
 
     mockSettingsController = mock(SettingsController.class);
     final SettingsData settingsData = new TestSettingsData();
@@ -80,7 +78,6 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
   @Override
   public void tearDown() throws Exception {
     super.tearDown();
-    cleanSdkDirectory();
   }
 
   private static final class CoreBuilder {
@@ -89,6 +86,7 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
     private CrashlyticsNativeComponent nativeComponent;
     private DataCollectionArbiter arbiter;
     private ExecutorService crashHandlerExecutor;
+    private FileStore fileStore;
 
     public CoreBuilder(Context context, FirebaseOptions firebaseOptions) {
       app = mock(FirebaseApp.class);
@@ -104,12 +102,21 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
               installationsApiMock,
               DataCollectionArbiterTest.MOCK_ARBITER_ENABLED);
 
-      nativeComponent = new ProviderProxyNativeComponent(() -> null);
+      nativeComponent =
+          new CrashlyticsNativeComponentDeferredProxy(
+              new Deferred<CrashlyticsNativeComponent>() {
+                @Override
+                public void whenAvailable(
+                    @NonNull Deferred.DeferredHandler<CrashlyticsNativeComponent> handler) {
+                  // no-op
+                }
+              });
 
       arbiter = mock(DataCollectionArbiter.class);
       when(arbiter.isAutomaticDataCollectionEnabled()).thenReturn(true);
 
       crashHandlerExecutor = new SameThreadExecutorService();
+      fileStore = new FileStore(context);
     }
 
     public CoreBuilder setNativeComponent(CrashlyticsNativeComponent nativeComponent) {
@@ -125,6 +132,7 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
           arbiter,
           new DisabledBreadcrumbSource(),
           new UnavailableAnalyticsEventLogger(),
+          fileStore,
           crashHandlerExecutor);
     }
   }
@@ -171,18 +179,6 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
         return testAppInfo;
       }
     };
-  }
-
-  private void cleanSdkDirectory() {
-    // We need to get rid of all initialization markers and session files to test the
-    // behaviors in this test class
-    final File[] files = fileStore.getFilesDir().listFiles();
-
-    if (files != null) {
-      for (File f : files) {
-        f.delete();
-      }
-    }
   }
 
   // FIXME: Restore this test without hasOpenSession
@@ -259,9 +255,6 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
   }
 
   private void setupAppData(String buildId) {
-    final UnityVersionProvider unityVersionProvider = mock(UnityVersionProvider.class);
-    when(unityVersionProvider.getUnityVersion()).thenReturn("1.0");
-
     appData =
         new AppData(
             GOOGLE_APP_ID,
@@ -270,7 +263,8 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
             "packageName",
             "versionCode",
             "versionName",
-            unityVersionProvider);
+            "Unity",
+            "1.0");
   }
 
   private void setupResource(Integer resId, String type, String name, String value) {
@@ -283,6 +277,6 @@ public class CrashlyticsCoreInitializationTest extends CrashlyticsTestCase {
   }
 
   private File getCrashMarkerFile() {
-    return new File(fileStore.getFilesDir(), CrashlyticsCore.CRASH_MARKER_FILE_NAME);
+    return fileStore.getCommonFile(CrashlyticsCore.CRASH_MARKER_FILE_NAME);
   }
 }

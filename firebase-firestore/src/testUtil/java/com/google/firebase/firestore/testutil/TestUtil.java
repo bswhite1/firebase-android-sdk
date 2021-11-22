@@ -33,9 +33,13 @@ import com.google.firebase.database.collection.ImmutableSortedMap;
 import com.google.firebase.database.collection.ImmutableSortedSet;
 import com.google.firebase.firestore.Blob;
 import com.google.firebase.firestore.DocumentReference;
+import com.google.firebase.firestore.DocumentSnapshot;
 import com.google.firebase.firestore.FieldValue;
+import com.google.firebase.firestore.FirebaseFirestore;
 import com.google.firebase.firestore.TestAccessHelper;
 import com.google.firebase.firestore.UserDataReader;
+import com.google.firebase.firestore.UserDataWriter;
+import com.google.firebase.firestore.core.Bound;
 import com.google.firebase.firestore.core.FieldFilter;
 import com.google.firebase.firestore.core.Filter.Operator;
 import com.google.firebase.firestore.core.OrderBy;
@@ -50,6 +54,7 @@ import com.google.firebase.firestore.model.DatabaseId;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.DocumentSet;
+import com.google.firebase.firestore.model.FieldIndex;
 import com.google.firebase.firestore.model.FieldPath;
 import com.google.firebase.firestore.model.MutableDocument;
 import com.google.firebase.firestore.model.ObjectValue;
@@ -86,6 +91,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /** A set of utilities for tests */
@@ -148,6 +154,12 @@ public class TestUtil {
     return wrapObject(map(entries));
   }
 
+  public static Object decodeValue(FirebaseFirestore firestore, Value value) {
+    UserDataWriter dataWriter =
+        new UserDataWriter(firestore, DocumentSnapshot.ServerTimestampBehavior.NONE);
+    return dataWriter.convertValue(value);
+  }
+
   public static DocumentKey key(String key) {
     return DocumentKey.fromPathString(key);
   }
@@ -179,6 +191,10 @@ public class TestUtil {
   public static SnapshotVersion version(long versionMicros) {
     long seconds = versionMicros / 1000000;
     int nanos = (int) (versionMicros % 1000000L) * 1000;
+    return new SnapshotVersion(new Timestamp(seconds, nanos));
+  }
+
+  public static SnapshotVersion version(int seconds, int nanos) {
     return new SnapshotVersion(new Timestamp(seconds, nanos));
   }
 
@@ -275,6 +291,14 @@ public class TestUtil {
       throw new IllegalArgumentException("Unknown direction: " + dir);
     }
     return OrderBy.getInstance(direction, field(key));
+  }
+
+  public static Bound bound(boolean inclusive, Object... values) {
+    return new Bound(
+        Arrays.stream(values)
+            .map(v -> v instanceof Value ? (Value) v : wrap(v))
+            .collect(Collectors.toList()),
+        inclusive);
   }
 
   public static void testEquality(List<List<Integer>> equalityGroups) {
@@ -564,6 +588,37 @@ public class TestUtil {
 
   public static ByteString streamToken(String contents) {
     return ByteString.copyFrom(contents, Charsets.UTF_8);
+  }
+
+  public static FieldIndex fieldIndex(
+      String collectionGroup,
+      int indexId,
+      SnapshotVersion readTime,
+      String field,
+      FieldIndex.Segment.Kind kind,
+      Object... fieldAndKinds) {
+    List<FieldIndex.Segment> segments = new ArrayList<>();
+    segments.add(FieldIndex.Segment.create(field(field), kind));
+    for (int i = 0; i < fieldAndKinds.length; i += 2) {
+      segments.add(
+          FieldIndex.Segment.create(
+              field((String) fieldAndKinds[i]), (FieldIndex.Segment.Kind) fieldAndKinds[i + 1]));
+    }
+    return FieldIndex.create(indexId, collectionGroup, segments, readTime);
+  }
+
+  public static FieldIndex fieldIndex(
+      String collectionGroup, String field, FieldIndex.Segment.Kind kind, Object... fieldAndKind) {
+    return fieldIndex(collectionGroup, -1, SnapshotVersion.NONE, field, kind, fieldAndKind);
+  }
+
+  public static FieldIndex fieldIndex(
+      String collectionGroup, int indexId, SnapshotVersion readTime) {
+    return FieldIndex.create(indexId, collectionGroup, Collections.emptyList(), readTime);
+  }
+
+  public static FieldIndex fieldIndex(String collectionGroup) {
+    return fieldIndex(collectionGroup, -1, SnapshotVersion.NONE);
   }
 
   private static Map<String, Object> fromJsonString(String json) {

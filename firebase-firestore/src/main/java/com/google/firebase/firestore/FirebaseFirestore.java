@@ -27,18 +27,24 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.appcheck.interop.InternalAppCheckTokenProvider;
 import com.google.firebase.auth.internal.InternalAuthProvider;
 import com.google.firebase.emulators.EmulatedServiceSettings;
 import com.google.firebase.firestore.FirebaseFirestoreException.Code;
 import com.google.firebase.firestore.auth.CredentialsProvider;
+import com.google.firebase.firestore.auth.FirebaseAppCheckTokenProvider;
 import com.google.firebase.firestore.auth.FirebaseAuthCredentialsProvider;
+import com.google.firebase.firestore.auth.User;
 import com.google.firebase.firestore.core.ActivityScope;
 import com.google.firebase.firestore.core.AsyncEventListener;
 import com.google.firebase.firestore.core.DatabaseInfo;
 import com.google.firebase.firestore.core.FirestoreClient;
 import com.google.firebase.firestore.local.SQLitePersistence;
 import com.google.firebase.firestore.model.DatabaseId;
+import com.google.firebase.firestore.model.FieldIndex;
+import com.google.firebase.firestore.model.FieldPath;
 import com.google.firebase.firestore.model.ResourcePath;
+import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.remote.FirestoreChannel;
 import com.google.firebase.firestore.remote.GrpcMetadataProvider;
 import com.google.firebase.firestore.util.AsyncQueue;
@@ -51,7 +57,12 @@ import com.google.firebase.inject.Deferred;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executor;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Represents a Cloud Firestore database and is the entry point for all Cloud Firestore operations.
@@ -78,7 +89,8 @@ public class FirebaseFirestore {
   // databaseId itself that needs locking; it just saves us creating a separate lock object.
   private final DatabaseId databaseId;
   private final String persistenceKey;
-  private final CredentialsProvider credentialsProvider;
+  private final CredentialsProvider<User> authProvider;
+  private final CredentialsProvider<String> appCheckProvider;
   private final AsyncQueue asyncQueue;
   private final FirebaseApp firebaseApp;
   private final UserDataReader userDataReader;
@@ -117,7 +129,8 @@ public class FirebaseFirestore {
   static FirebaseFirestore newInstance(
       @NonNull Context context,
       @NonNull FirebaseApp app,
-      @NonNull Deferred<InternalAuthProvider> authProvider,
+      @NonNull Deferred<InternalAuthProvider> deferredAuthProvider,
+      @NonNull Deferred<InternalAppCheckTokenProvider> deferredAppCheckTokenProvider,
       @NonNull String database,
       @NonNull InstanceRegistry instanceRegistry,
       @Nullable GrpcMetadataProvider metadataProvider) {
@@ -129,7 +142,10 @@ public class FirebaseFirestore {
 
     AsyncQueue queue = new AsyncQueue();
 
-    CredentialsProvider provider = new FirebaseAuthCredentialsProvider(authProvider);
+    CredentialsProvider<User> authProvider =
+        new FirebaseAuthCredentialsProvider(deferredAuthProvider);
+    CredentialsProvider<String> appCheckProvider =
+        new FirebaseAppCheckTokenProvider(deferredAppCheckTokenProvider);
 
     // Firestore uses a different database for each app name. Note that we don't use
     // app.getPersistenceKey() here because it includes the application ID which is related
@@ -142,7 +158,8 @@ public class FirebaseFirestore {
             context,
             databaseId,
             persistenceKey,
-            provider,
+            authProvider,
+            appCheckProvider,
             queue,
             app,
             instanceRegistry,
@@ -155,7 +172,8 @@ public class FirebaseFirestore {
       Context context,
       DatabaseId databaseId,
       String persistenceKey,
-      CredentialsProvider credentialsProvider,
+      CredentialsProvider<User> authProvider,
+      CredentialsProvider<String> appCheckProvider,
       AsyncQueue asyncQueue,
       @Nullable FirebaseApp firebaseApp,
       InstanceRegistry instanceRegistry,
@@ -164,7 +182,8 @@ public class FirebaseFirestore {
     this.databaseId = checkNotNull(checkNotNull(databaseId));
     this.userDataReader = new UserDataReader(databaseId);
     this.persistenceKey = checkNotNull(persistenceKey);
-    this.credentialsProvider = checkNotNull(credentialsProvider);
+    this.authProvider = checkNotNull(authProvider);
+    this.appCheckProvider = checkNotNull(appCheckProvider);
     this.asyncQueue = checkNotNull(asyncQueue);
     // NOTE: We allow firebaseApp to be null in tests only.
     this.firebaseApp = firebaseApp;
@@ -235,7 +254,13 @@ public class FirebaseFirestore {
 
       client =
           new FirestoreClient(
-              context, databaseInfo, settings, credentialsProvider, asyncQueue, metadataProvider);
+              context,
+              databaseInfo,
+              settings,
+              authProvider,
+              appCheckProvider,
+              asyncQueue,
+              metadataProvider);
     }
   }
 
@@ -262,6 +287,67 @@ public class FirebaseFirestore {
   @NonNull
   public FirebaseApp getApp() {
     return firebaseApp;
+  }
+
+  /**
+   * Configures Indexing for local query execution. Any previous index configuration is overridden.
+   * The Task resolves once the index configuration has been persisted.
+   *
+   * <p>The index entries themselves are created asynchronously. You can continue to use queries
+   * that require indexing even if the indices are not yet available. Query execution will
+   * automatically start using the index once the index entries have been written.
+   *
+   * <p>The method accepts the JSON format exported by the Firebase CLI (`firebase
+   * firestore:indexes`). If the JSON format is invalid, this method rejects the returned task.
+   *
+   * @param json The JSON format exported by the Firebase CLI.
+   * @return A task that resolves once all indices are successfully configured.
+   */
+  @VisibleForTesting
+  Task<Void> configureIndices(String json) {
+    ensureClientConfigured();
+
+    // Preconditions.checkState(BuildConfig.ENABLE_INDEXING, "Indexing support is not yet
+    // available.");
+
+    List<FieldIndex> parsedIndices = new ArrayList<>();
+
+    // See https://firebase.google.com/docs/reference/firestore/indexes/#json_format for the
+    // format of the index definition. Unlike the backend, the SDK does not distinguish between
+    // collection ID and collection group indices and hence the queryScope field is ignored.
+
+    try {
+      JSONObject jsonObject = new JSONObject(json);
+
+      if (jsonObject.has("indexes")) {
+        JSONArray indices = jsonObject.getJSONArray("indexes");
+        for (int i = 0; i < indices.length(); ++i) {
+          JSONObject definition = indices.getJSONObject(i);
+          String collectionGroup = definition.getString("collectionGroup");
+          List<FieldIndex.Segment> segments = new ArrayList<>();
+
+          JSONArray fields = definition.optJSONArray("fields");
+          for (int f = 0; fields != null && f < fields.length(); ++f) {
+            JSONObject field = fields.getJSONObject(f);
+            FieldPath fieldPath = FieldPath.fromServerFormat(field.getString("fieldPath"));
+            if ("CONTAINS".equals(field.optString("arrayConfig"))) {
+              segments.add(FieldIndex.Segment.create(fieldPath, FieldIndex.Segment.Kind.CONTAINS));
+            } else if ("ASCENDING".equals(field.optString("order"))) {
+              segments.add(FieldIndex.Segment.create(fieldPath, FieldIndex.Segment.Kind.ASCENDING));
+            } else {
+              segments.add(
+                  FieldIndex.Segment.create(fieldPath, FieldIndex.Segment.Kind.DESCENDING));
+            }
+          }
+
+          parsedIndices.add(FieldIndex.create(-1, collectionGroup, segments, SnapshotVersion.NONE));
+        }
+      }
+    } catch (JSONException e) {
+      throw new IllegalArgumentException("Failed to parse index configuration", e);
+    }
+
+    return client.configureFieldIndexes(parsedIndices);
   }
 
   /**

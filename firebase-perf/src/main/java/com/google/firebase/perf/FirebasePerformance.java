@@ -35,7 +35,7 @@ import com.google.firebase.perf.logging.ConsoleUrlGenerator;
 import com.google.firebase.perf.metrics.HttpMetric;
 import com.google.firebase.perf.metrics.Trace;
 import com.google.firebase.perf.metrics.validator.PerfMetricValidator;
-import com.google.firebase.perf.session.gauges.GaugeManager;
+import com.google.firebase.perf.session.SessionManager;
 import com.google.firebase.perf.transport.TransportManager;
 import com.google.firebase.perf.util.Constants;
 import com.google.firebase.perf.util.ImmutableBundle;
@@ -153,7 +153,7 @@ public class FirebasePerformance implements FirebasePerformanceAttributable {
    * @param transportFactoryProvider The {@link Provider} for the the {@link TransportFactory}.
    * @param remoteConfigManager The RemoteConfigManager instance.
    * @param configResolver The ConfigResolver instance.
-   * @param gaugeManager The GaugeManager instance.
+   * @param sessionManager The SessionManager instance.
    */
   @VisibleForTesting
   @Inject
@@ -164,7 +164,7 @@ public class FirebasePerformance implements FirebasePerformanceAttributable {
       Provider<TransportFactory> transportFactoryProvider,
       RemoteConfigManager remoteConfigManager,
       ConfigResolver configResolver,
-      GaugeManager gaugeManager) {
+      SessionManager sessionManager) {
 
     this.firebaseApp = firebaseApp;
     this.firebaseRemoteConfigProvider = firebaseRemoteConfigProvider;
@@ -189,10 +189,10 @@ public class FirebasePerformance implements FirebasePerformanceAttributable {
     this.configResolver = configResolver;
     this.configResolver.setMetadataBundle(mMetadataBundle);
     this.configResolver.setApplicationContext(appContext);
-    gaugeManager.setApplicationContext(appContext);
+    sessionManager.setApplicationContext(appContext);
 
     mPerformanceCollectionForceEnabledState = configResolver.getIsPerformanceCollectionEnabled();
-    if (isPerformanceCollectionEnabled()) {
+    if (logger.isLogcatEnabled() && isPerformanceCollectionEnabled()) {
       logger.info(
           String.format(
               "Firebase Performance Monitoring is successfully initialized! In a minute, visit the Firebase console to view your data: %s",

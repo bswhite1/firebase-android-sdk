@@ -26,17 +26,20 @@ import static org.robolectric.Shadows.shadowOf;
 import android.app.ActivityManager;
 import android.app.ApplicationExitInfo;
 import android.content.Context;
+import androidx.annotation.NonNull;
 import androidx.test.core.app.ApplicationProvider;
-import com.google.firebase.crashlytics.internal.ProviderProxyNativeComponent;
+import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponent;
+import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponentDeferredProxy;
 import com.google.firebase.crashlytics.internal.analytics.AnalyticsEventLogger;
 import com.google.firebase.crashlytics.internal.log.LogFileManager;
 import com.google.firebase.crashlytics.internal.persistence.FileStore;
 import com.google.firebase.crashlytics.internal.settings.SettingsDataProvider;
 import com.google.firebase.crashlytics.internal.settings.model.FeaturesSettingsData;
 import com.google.firebase.crashlytics.internal.settings.model.Settings;
-import com.google.firebase.crashlytics.internal.unity.UnityVersionProvider;
-import java.io.File;
+import com.google.firebase.inject.Deferred;
 import java.util.Collections;
+import java.util.List;
+import java.util.TreeSet;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -51,16 +54,25 @@ public class CrashlyticsControllerRobolectricTest {
   private Context testContext;
   @Mock private IdManager idManager;
   @Mock private SettingsDataProvider mockSettingsDataProvider;
-  @Mock private FileStore mockFileStore;
-  @Mock private File mockFilesDirectory;
+  @Mock private FileStore testFileStore;
   @Mock private SessionReportingCoordinator mockSessionReportingCoordinator;
   @Mock private DataCollectionArbiter mockDataCollectionArbiter;
-  @Mock private LogFileManager.DirectoryProvider mockLogFileDirecotryProvider;
+
+  private static final CrashlyticsNativeComponent MISSING_NATIVE_COMPONENT =
+      new CrashlyticsNativeComponentDeferredProxy(
+          new Deferred<CrashlyticsNativeComponent>() {
+            @Override
+            public void whenAvailable(
+                @NonNull Deferred.DeferredHandler<CrashlyticsNativeComponent> handler) {
+              // no-op
+            }
+          });
 
   @Before
   public void setUp() {
     MockitoAnnotations.initMocks(this);
     testContext = getApplicationContext();
+    testFileStore = new FileStore(testContext);
   }
 
   @Test
@@ -69,13 +81,13 @@ public class CrashlyticsControllerRobolectricTest {
     final CrashlyticsController controller = createController();
 
     when(mockSessionReportingCoordinator.listSortedOpenSessionIds())
-        .thenReturn(Collections.singletonList(sessionId));
+        .thenReturn(new TreeSet<>(Collections.singletonList(sessionId)));
     mockSettingsData(true);
     controller.doCloseSessions(mockSettingsDataProvider);
     // Since we haven't added any app exit info to the shadow activity manager, there won't exist a
     // single app exit info, and so this method won't be called.
     verify(mockSessionReportingCoordinator, never())
-        .persistAppExitInfoEvent(
+        .persistRelevantAppExitInfoEvent(
             eq(sessionId), any(), any(LogFileManager.class), any(UserMetadata.class));
   }
 
@@ -83,14 +95,18 @@ public class CrashlyticsControllerRobolectricTest {
   public void testDoCloseSession_enabledAnrs_persistsAppExitInfoIfItExists() {
     final String sessionId = "sessionId";
     final CrashlyticsController controller = createController();
-    ApplicationExitInfo testApplicationExitInfo = addAppExitInfo(ApplicationExitInfo.REASON_ANR);
+    // Adds multiple AppExitInfos to confirm that Crashlytics loops through
+    // them rather than just looking at the first.
+    addAppExitInfo(ApplicationExitInfo.REASON_ANR);
+    addAppExitInfo(ApplicationExitInfo.REASON_EXIT_SELF);
+    List<ApplicationExitInfo> testApplicationExitInfo = getApplicationExitInfoList();
 
     when(mockSessionReportingCoordinator.listSortedOpenSessionIds())
-        .thenReturn(Collections.singletonList(sessionId));
+        .thenReturn(new TreeSet<>(Collections.singletonList(sessionId)));
     mockSettingsData(true);
     controller.doCloseSessions(mockSettingsDataProvider);
     verify(mockSessionReportingCoordinator)
-        .persistAppExitInfoEvent(
+        .persistRelevantAppExitInfoEvent(
             eq(sessionId),
             eq(testApplicationExitInfo),
             any(LogFileManager.class),
@@ -103,11 +119,11 @@ public class CrashlyticsControllerRobolectricTest {
     final CrashlyticsController controller = createController();
 
     when(mockSessionReportingCoordinator.listSortedOpenSessionIds())
-        .thenReturn(Collections.singletonList(sessionId));
+        .thenReturn(new TreeSet<>(Collections.singletonList(sessionId)));
     mockSettingsData(false);
     controller.doCloseSessions(mockSettingsDataProvider);
     verify(mockSessionReportingCoordinator, never())
-        .persistAppExitInfoEvent(
+        .persistRelevantAppExitInfoEvent(
             eq(sessionId), any(), any(LogFileManager.class), any(UserMetadata.class));
   }
 
@@ -127,7 +143,8 @@ public class CrashlyticsControllerRobolectricTest {
             "packageName",
             "versionCode",
             "versionName",
-            mock(UnityVersionProvider.class));
+            /*developmentPlatform=*/ null,
+            /*developmentPlatformVersion=*/ null);
 
     final CrashlyticsController controller =
         new CrashlyticsController(
@@ -135,20 +152,19 @@ public class CrashlyticsControllerRobolectricTest {
             new CrashlyticsBackgroundWorker(Runnable::run),
             idManager,
             mockDataCollectionArbiter,
-            mockFileStore,
-            new CrashlyticsFileMarker(CrashlyticsCore.CRASH_MARKER_FILE_NAME, mockFileStore),
+            testFileStore,
+            new CrashlyticsFileMarker(CrashlyticsCore.CRASH_MARKER_FILE_NAME, testFileStore),
             appData,
             null,
             null,
-            mockLogFileDirecotryProvider,
             mockSessionReportingCoordinator,
-            new ProviderProxyNativeComponent(() -> null),
+            MISSING_NATIVE_COMPONENT,
             mock(AnalyticsEventLogger.class));
     controller.openSession();
     return controller;
   }
 
-  private ApplicationExitInfo addAppExitInfo(int reason) {
+  private void addAppExitInfo(int reason) {
     ActivityManager activityManager =
         (ActivityManager)
             ApplicationProvider.getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE);
@@ -157,6 +173,12 @@ public class CrashlyticsControllerRobolectricTest {
     shadowOf(activityManager)
         .addApplicationExitInfo(
             runningAppProcessInfo.processName, runningAppProcessInfo.pid, reason, 1);
-    return activityManager.getHistoricalProcessExitReasons(null, 0, 0).get(0);
+  }
+
+  private List<ApplicationExitInfo> getApplicationExitInfoList() {
+    ActivityManager activityManager =
+        (ActivityManager)
+            ApplicationProvider.getApplicationContext().getSystemService(Context.ACTIVITY_SERVICE);
+    return activityManager.getHistoricalProcessExitReasons(null, 0, 0);
   }
 }

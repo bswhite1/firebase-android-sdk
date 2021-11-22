@@ -25,8 +25,9 @@ import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.analytics.connector.AnalyticsConnector;
 import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponent;
+import com.google.firebase.crashlytics.internal.CrashlyticsNativeComponentDeferredProxy;
+import com.google.firebase.crashlytics.internal.DevelopmentPlatformProvider;
 import com.google.firebase.crashlytics.internal.Logger;
-import com.google.firebase.crashlytics.internal.ProviderProxyNativeComponent;
 import com.google.firebase.crashlytics.internal.common.AppData;
 import com.google.firebase.crashlytics.internal.common.CommonUtils;
 import com.google.firebase.crashlytics.internal.common.CrashlyticsCore;
@@ -34,18 +35,16 @@ import com.google.firebase.crashlytics.internal.common.DataCollectionArbiter;
 import com.google.firebase.crashlytics.internal.common.ExecutorUtils;
 import com.google.firebase.crashlytics.internal.common.IdManager;
 import com.google.firebase.crashlytics.internal.network.HttpRequestFactory;
+import com.google.firebase.crashlytics.internal.persistence.FileStore;
 import com.google.firebase.crashlytics.internal.settings.SettingsController;
-import com.google.firebase.crashlytics.internal.unity.ResourceUnityVersionProvider;
-import com.google.firebase.crashlytics.internal.unity.UnityVersionProvider;
 import com.google.firebase.inject.Deferred;
-import com.google.firebase.inject.Provider;
 import com.google.firebase.installations.FirebaseInstallationsApi;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 
 /**
- * The Firebase Crashlytics API provides methods to annotate and manage fatal and non-fatal reports
- * captured and reported to Firebase Crashlytics.
+ * The Firebase Crashlytics API provides methods to annotate and manage fatal crashes, non-fatal
+ * errors, and ANRs captured and reported to Firebase Crashlytics.
  *
  * <p>By default, Firebase Crashlytics is automatically initialized.
  *
@@ -61,7 +60,7 @@ public class FirebaseCrashlytics {
   static @Nullable FirebaseCrashlytics init(
       @NonNull FirebaseApp app,
       @NonNull FirebaseInstallationsApi firebaseInstallationsApi,
-      @NonNull Provider<CrashlyticsNativeComponent> nativeComponent,
+      @NonNull Deferred<CrashlyticsNativeComponent> nativeComponent,
       @NonNull Deferred<AnalyticsConnector> analyticsConnector) {
 
     Context context = app.getApplicationContext();
@@ -73,11 +72,12 @@ public class FirebaseCrashlytics {
                 + " for "
                 + appIdentifier);
 
+    FileStore fileStore = new FileStore(context);
     final DataCollectionArbiter arbiter = new DataCollectionArbiter(app);
     final IdManager idManager =
         new IdManager(context, appIdentifier, firebaseInstallationsApi, arbiter);
-    final ProviderProxyNativeComponent proxyNativeComponent =
-        new ProviderProxyNativeComponent(nativeComponent);
+    final CrashlyticsNativeComponentDeferredProxy deferredNativeComponent =
+        new CrashlyticsNativeComponentDeferredProxy(nativeComponent);
 
     // Integration with Firebase Analytics
     final AnalyticsDeferredProxy analyticsDeferredProxy =
@@ -90,22 +90,26 @@ public class FirebaseCrashlytics {
         new CrashlyticsCore(
             app,
             idManager,
-            proxyNativeComponent,
+            deferredNativeComponent,
             arbiter,
             analyticsDeferredProxy.getDeferredBreadcrumbSource(),
             analyticsDeferredProxy.getAnalyticsEventLogger(),
+            fileStore,
             crashHandlerExecutor);
 
     final String googleAppId = app.getOptions().getApplicationId();
     final String mappingFileId = CommonUtils.getMappingFileId(context);
+
     Logger.getLogger().d("Mapping file ID is: " + mappingFileId);
 
-    final UnityVersionProvider unityVersionProvider = new ResourceUnityVersionProvider(context);
+    final DevelopmentPlatformProvider developmentPlatformProvider =
+        new DevelopmentPlatformProvider(context);
 
     AppData appData;
     try {
       appData =
-          AppData.create(context, idManager, googleAppId, mappingFileId, unityVersionProvider);
+          AppData.create(
+              context, idManager, googleAppId, mappingFileId, developmentPlatformProvider);
     } catch (PackageManager.NameNotFoundException e) {
       Logger.getLogger().e("Error retrieving app package info.", e);
       return null;
@@ -124,6 +128,7 @@ public class FirebaseCrashlytics {
             new HttpRequestFactory(),
             appData.versionCode,
             appData.versionName,
+            fileStore,
             arbiter);
 
     // Kick off actually fetching the settings.
@@ -197,7 +202,7 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Logs a message that's included in the next fatal or non-fatal report.
+   * Logs a message that's included in the next fatal, non-fatal, or ANR report.
    *
    * <p>Logs are visible in the session view on the Firebase Crashlytics console.
    *
@@ -212,7 +217,8 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Records a user ID (identifier) that's associated with subsequent fatal and non-fatal reports.
+   * Records a user ID (identifier) that's associated with subsequent fatal, non-fatal, and ANR
+   * reports.
    *
    * <p>The user ID is visible in the session view on the Firebase Crashlytics console.
    *
@@ -225,11 +231,12 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Sets a custom key and value that are associated with subsequent fatal and non-fatal reports.
+   * Sets a custom key and value that are associated with subsequent fatal, non-fatal, and ANR
+   * reports.
    *
    * <p>Multiple calls to this method with the same key update the value for that key.
    *
-   * <p>The value of any key at the time of a fatal or non-fatal event is associated with that
+   * <p>The value of any key at the time of a fatal, non-fatal, or ANR event is associated with that
    * event.
    *
    * <p>Keys and associated values are visible in the session view on the Firebase Crashlytics
@@ -267,11 +274,12 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Sets a custom key and value that are associated with subsequent fatal and non-fatal reports.
+   * Sets a custom key and value that are associated with subsequent fatal, non-fatal, and ANR
+   * reports.
    *
    * <p>Multiple calls to this method with the same key update the value for that key.
    *
-   * <p>The value of any key at the time of a fatal or non-fatal event is associated with that
+   * <p>The value of any key at the time of a fatal, non-fatal, or ANR event is associated with that
    * event.
    *
    * <p>Keys and associated values are visible in the session view on the Firebase Crashlytics
@@ -288,11 +296,12 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Sets a custom key and value that are associated with subsequent fatal and non-fatal reports.
+   * Sets a custom key and value that are associated with subsequent fatal, non-fatal, and ANR
+   * reports.
    *
    * <p>Multiple calls to this method with the same key update the value for that key.
    *
-   * <p>The value of any key at the time of a fatal or non-fatal event is associated with that
+   * <p>The value of any key at the time of a fatal, non-fatal, or ANR event is associated with that
    * event.
    *
    * <p>Keys and associated values are visible in the session view on the Firebase Crashlytics
@@ -309,12 +318,13 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Records a custom key and value to be associated with subsequent fatal and non-fatal reports.
+   * Records a custom key and value to be associated with subsequent fatal, non-fatal, and ANR
+   * reports.
    *
    * <p>Multiple calls to this method with the same key will update the value for that key.
    *
-   * <p>The value of any key at the time of a fatal or non-fatal event will be associated with that
-   * event.
+   * <p>The value of any key at the time of a fatal, non-fatal, or ANR event will be associated with
+   * that event.
    *
    * <p>Keys and associated values are visible in the session view on the Firebase Crashlytics
    * console.
@@ -330,11 +340,12 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Sets a custom key and value that are associated with subsequent fatal and non-fatal reports.
+   * Sets a custom key and value that are associated with subsequent fatal, non-fatal, and ANR
+   * reports.
    *
    * <p>Multiple calls to this method with the same key update the value for that key.
    *
-   * <p>The value of any key at the time of a fatal or non-fatal event is associated with that
+   * <p>The value of any key at the time of a fatal, non-fatal, or ANR event is associated with that
    * event.
    *
    * <p>Keys and associated values are visible in the session view on the Firebase Crashlytics
@@ -351,13 +362,13 @@ public class FirebaseCrashlytics {
   }
 
   /**
-   * Sets multiple custom keys and values that are associated with subsequent fatal and non-fatal
-   * reports. This method is intended as an alternative to {@code setCustomKey} in order to reduce
-   * the computational load of writing out multiple key/value pairs at the same time.
+   * Sets multiple custom keys and values that are associated with subsequent fatal, non-fatal, and
+   * ANR reports. This method is intended as an alternative to {@code setCustomKey} in order to
+   * reduce the computational load of writing out multiple key/value pairs at the same time.
    *
    * <p>Multiple calls to this method with the same key update the value for that key.
    *
-   * <p>The value of any key at the time of a fatal or non-fatal event is associated with that
+   * <p>The value of any key at the time of a fatal, non-fatal, or ANR event is associated with that
    * event.
    *
    * <p>Keys and associated values are visible in the session view on the Firebase Crashlytics
@@ -377,10 +388,10 @@ public class FirebaseCrashlytics {
   // region Unsent report management.
 
   /**
-   * Checks a device for any fatal or non-fatal crash reports that haven't yet been sent to
-   * Crashlytics. If automatic data collection is enabled, then reports are uploaded automatically
-   * and this always returns false. If automatic data collection is disabled, this method can be
-   * used to check whether the user opts-in to send crash reports from their device.
+   * Checks a device for any fatal crash, non-fatal error, or ANR reports that haven't yet been sent
+   * to Crashlytics. If automatic data collection is enabled, then reports are uploaded
+   * automatically and this always returns false. If automatic data collection is disabled, this
+   * method can be used to check whether the user opts-in to send crash reports from their device.
    *
    * @return a Task that is resolved with the result.
    */
