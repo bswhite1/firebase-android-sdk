@@ -20,6 +20,8 @@ import androidx.annotation.Nullable;
 import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.core.DocumentViewChange.Type;
+import com.google.firebase.firestore.util.Logger;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -91,7 +93,9 @@ public class QueryListener {
     }
 
     if (!raisedInitialEvent) {
+      Logger.debug("Ben onViewSnapshot", "onlineState: %s", onlineState.toString());
       if (shouldRaiseInitialEvent(newSnapshot, onlineState)) {
+        Logger.debug("Ben onViewSnapshot", "Calling raiseInitialEvent");
         raiseInitialEvent(newSnapshot);
         raisedEvent = true;
       }
@@ -112,7 +116,11 @@ public class QueryListener {
   public boolean onOnlineStateChanged(OnlineState onlineState) {
     this.onlineState = onlineState;
     boolean raisedEvent = false;
+
+    Logger.debug("Ben onOnlineStateChanged", "onlineState: %s", onlineState.toString());
+
     if (snapshot != null && !raisedInitialEvent && shouldRaiseInitialEvent(snapshot, onlineState)) {
+      Logger.debug("Ben onOnlineStateChanged", "Calling raiseInitialEvent");
       raiseInitialEvent(snapshot);
       raisedEvent = true;
     }

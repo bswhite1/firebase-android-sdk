@@ -18,6 +18,7 @@ import com.google.firebase.database.collection.ImmutableSortedSet;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.DocumentSet;
+import com.google.firebase.firestore.util.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -67,9 +68,13 @@ public class ViewSnapshot {
       boolean fromCache,
       boolean excludesMetadataChanges) {
     List<DocumentViewChange> viewChanges = new ArrayList<>();
+
+    Logger.debug("Ben fromInitialDocuments", "New ViewSnapshot. fromCache: %s", fromCache);
     for (Document doc : documents) {
       viewChanges.add(DocumentViewChange.create(DocumentViewChange.Type.ADDED, doc));
+      Logger.debug("Ben fromInitialDocuments", "     document key: %s  fromCache: %s", doc.getKey().getPath().canonicalString(), fromCache);
     }
+
     return new ViewSnapshot(
         query,
         documents,

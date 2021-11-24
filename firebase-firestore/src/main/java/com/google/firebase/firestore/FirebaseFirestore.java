@@ -524,7 +524,7 @@ public class FirebaseFirestore {
    *     by the backend.
    */
   @NonNull
-  public Task<Void> get() {
+  public Task<Void> waitForPendingWrites() {
     return client.waitForPendingWrites();
   }
 

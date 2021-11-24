@@ -224,6 +224,12 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       synthesizedCurrentChange =
           TargetChange.createSynthesizedTargetChangeForCurrentChange(
               currentTargetSyncState == SyncState.SYNCED);
+
+      Logger.debug("Ben initializeViewAndComputeSnapshot", "Calling applyChanges. currentTargetSyncState: %s synthesizedCurrentChange: %s", currentTargetSyncState.toString(), synthesizedCurrentChange.toString());
+
+    } else {
+      Logger.debug("Ben initializeViewAndComputeSnapshot", "Calling applyChanges. currentTargetSyncState: %s synthesizedCurrentChange: null", currentTargetSyncState.toString());
+
     }
 
     // TODO(wuandy): Investigate if we can extract the logic of view change computation and
@@ -639,6 +645,10 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       }
       TargetChange targetChange =
           remoteEvent == null ? null : remoteEvent.getTargetChanges().get(queryView.getTargetId());
+
+      Logger.debug("Ben emitNewSnapsAndNotifyLocalStore", "Calling applyChanges. viewDocChanges.needsRefill(): %s targetChange: %s",
+              viewDocChanges.needsRefill(), targetChange == null ? "null" : targetChange.toString());
+
       ViewChange viewChange = queryView.getView().applyChanges(viewDocChanges, targetChange);
       updateTrackedLimboDocuments(viewChange.getLimboChanges(), queryView.getTargetId());
 

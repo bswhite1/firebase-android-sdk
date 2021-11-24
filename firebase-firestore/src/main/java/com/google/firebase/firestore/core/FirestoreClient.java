@@ -216,6 +216,8 @@ public final class FirestoreClient {
           QueryResult queryResult = localStore.executeQuery(query, /* usePreviousResults= */ true);
           View view = new View(query, queryResult.getRemoteKeys());
           View.DocumentChanges viewDocChanges = view.computeDocChanges(queryResult.getDocuments());
+          Logger.debug("Ben getDocumentsFromLocalCache", "Calling applyChanges");
+
           return view.applyChanges(viewDocChanges).getSnapshot();
         });
   }

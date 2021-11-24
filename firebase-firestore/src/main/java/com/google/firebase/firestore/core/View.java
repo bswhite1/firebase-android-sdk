@@ -26,6 +26,7 @@ import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.DocumentSet;
 import com.google.firebase.firestore.remote.TargetChange;
+import com.google.firebase.firestore.util.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -311,6 +312,11 @@ public class View {
               docChanges.mutatedKeys,
               syncStatedChanged,
               /* excludesMetadataChanges= */ false);
+
+      Logger.debug("Ben ApplyChanges", "New ViewSnapshot. fromCache: %s syncStatedChanged: %s", fromCache, syncStatedChanged);
+      for ( Document document : documentSet) {
+        Logger.debug("Ben ApplyChanges", "     document key: %s  fromCache: %s syncStatedChanged: %s", document.getKey().getPath().canonicalString(), fromCache, syncStatedChanged);
+      }
     }
     return new ViewChange(snapshot, limboDocumentChanges);
   }
@@ -325,6 +331,8 @@ public class View {
       // syncState and generate a ViewChange as appropriate. We are guaranteed to get a new
       // TargetChange that sets `current` back to true once the client is back online.
       this.current = false;
+      Logger.debug("Ben applyOnlineStateChange", "Calling applyChanges.");
+
       return applyChanges(
           new DocumentChanges(
               documentSet, new DocumentViewChangeSet(), mutatedKeys, /*needsRefill=*/ false));
