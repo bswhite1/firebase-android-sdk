@@ -213,6 +213,13 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
   private ViewSnapshot initializeViewAndComputeSnapshot(Query query, int targetId) {
     QueryResult queryResult = localStore.executeQuery(query, /* usePreviousResults= */ true);
 
+
+    Logger.debug("Ben initializeViewAndComputeSnapshot", "Calling applyChanges. query: %s targetId: %d", query.getPath().canonicalString(), targetId);
+
+    for (Map.Entry<DocumentKey, Document> document : queryResult.getDocuments()) {
+      Logger.debug("Ben initializeViewAndComputeSnapshot", "     queryResult: %s", document.getKey().getPath().canonicalString());
+    }
+
     SyncState currentTargetSyncState = SyncState.NONE;
     TargetChange synthesizedCurrentChange = null;
 
@@ -285,6 +292,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     LocalWriteResult result = localStore.writeLocally(mutations);
     addUserCallback(result.getBatchId(), userTask);
 
+    Logger.debug("Ben writeMutations", "Calling emitNewSnapsAndNotifyLocalStore.");
+
     emitNewSnapsAndNotifyLocalStore(result.getChanges(), /*remoteEvent=*/ null);
     remoteStore.fillWritePipeline();
   }
@@ -355,6 +364,7 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     }
 
     ImmutableSortedMap<DocumentKey, Document> changes = localStore.applyRemoteEvent(event);
+    Logger.debug("Ben handleRemoteEvent", "Calling emitNewSnapsAndNotifyLocalStore.");
     emitNewSnapsAndNotifyLocalStore(changes, event);
   }
 
@@ -426,6 +436,7 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
               /* targetMismatches= */ Collections.emptySet(),
               documentUpdates,
               limboDocuments);
+      Logger.debug("Ben handleRejectedListen", "Calling handleRemoteEvent.");
       handleRemoteEvent(event);
     } else {
       localStore.releaseTarget(targetId);
@@ -447,6 +458,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     ImmutableSortedMap<DocumentKey, Document> changes =
         localStore.acknowledgeBatch(mutationBatchResult);
 
+    Logger.debug("Ben handleSuccessfulWrite", "Calling emitNewSnapsAndNotifyLocalStore.");
+
     emitNewSnapsAndNotifyLocalStore(changes, /*remoteEvent=*/ null);
   }
 
@@ -465,6 +478,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     notifyUser(batchId, status);
 
     resolvePendingWriteTasks(batchId);
+
+    Logger.debug("Ben handleRejectedWrite", "Calling emitNewSnapsAndNotifyLocalStore.");
 
     emitNewSnapsAndNotifyLocalStore(changes, /*remoteEvent=*/ null);
   }
@@ -548,6 +563,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
 
       ImmutableSortedMap<DocumentKey, Document> changes = bundleLoader.applyChanges();
 
+      Logger.debug("Ben loadBundle", "Calling emitNewSnapsAndNotifyLocalStore.");
+
       // TODO(b/160876443): This currently raises snapshots with `fromCache=false` if users already
       // listen to some queries and bundles has newer version.
       emitNewSnapsAndNotifyLocalStore(changes, /* remoteEvent= */ null);
@@ -615,10 +632,13 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     // the key won't exist in `limboTargetsByKey`. Only do the cleanup if we still have the target.
     Integer targetId = activeLimboTargetsByKey.get(key);
     if (targetId != null) {
+      Logger.debug("Ben SyncEngine", "removeLimboTarget document: %s targetId: %d", key.getPath().canonicalString(), targetId);
       remoteStore.stopListening(targetId);
       activeLimboTargetsByKey.remove(key);
       activeLimboResolutionsByTarget.remove(targetId);
       pumpEnqueuedLimboResolutions();
+    } else {
+      Logger.debug("Ben SyncEngine", "removeLimboTarget document: %s targetId: null", key.getPath().canonicalString());
     }
   }
 
@@ -630,6 +650,12 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       ImmutableSortedMap<DocumentKey, Document> changes, @Nullable RemoteEvent remoteEvent) {
     List<ViewSnapshot> newSnapshots = new ArrayList<>();
     List<LocalViewChanges> documentChangesInAllViews = new ArrayList<>();
+
+    Logger.debug("Ben emitNewSnapsAndNotifyLocalStore", "received changes");
+
+    for (Map.Entry<DocumentKey, Document> document : changes) {
+      Logger.debug("Ben emitNewSnapsAndNotifyLocalStore", "     changes: %s", document.getKey().getPath().canonicalString());
+    }
 
     for (Map.Entry<Query, QueryView> entry : queryViewsByQuery.entrySet()) {
       QueryView queryView = entry.getValue();
@@ -646,8 +672,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       TargetChange targetChange =
           remoteEvent == null ? null : remoteEvent.getTargetChanges().get(queryView.getTargetId());
 
-      Logger.debug("Ben emitNewSnapsAndNotifyLocalStore", "Calling applyChanges. viewDocChanges.needsRefill(): %s targetChange: %s",
-              viewDocChanges.needsRefill(), targetChange == null ? "null" : targetChange.toString());
+      Logger.debug("Ben emitNewSnapsAndNotifyLocalStore", "Calling applyChanges. viewDocChanges.needsRefill(): %s targetChange.isCurrent: %s targetId: %d",
+              viewDocChanges.needsRefill(), targetChange == null ? "null" : targetChange.isCurrent(), queryView.getTargetId());
 
       ViewChange viewChange = queryView.getView().applyChanges(viewDocChanges, targetChange);
       updateTrackedLimboDocuments(viewChange.getLimboChanges(), queryView.getTargetId());
@@ -659,7 +685,9 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
         documentChangesInAllViews.add(docChanges);
       }
     }
+    /// Ben should send new data to query listeners.
     syncEngineListener.onViewSnapshots(newSnapshots);
+
     localStore.notifyLocalViewChanges(documentChangesInAllViews);
   }
 
@@ -712,12 +740,17 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       int limboTargetId = targetIdGenerator.nextId();
       activeLimboResolutionsByTarget.put(limboTargetId, new LimboResolution(key));
       activeLimboTargetsByKey.put(key, limboTargetId);
+
+      Logger.debug("Ben pumpEnqueuedLimboResolutions", "targetId: %d SnapshotVersion: NONE lastLimboFreeSnapshotVersion: NONE",
+              limboTargetId);
+
       remoteStore.listen(
           new TargetData(
               Query.atPath(key.getPath()).toTarget(),
               limboTargetId,
               ListenSequence.INVALID,
               QueryPurpose.LIMBO_RESOLUTION));
+
     }
   }
 
@@ -742,6 +775,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       failOutstandingPendingWritesAwaitingTasks();
       // Notify local store and emit any resulting events from swapping out the mutation queue.
       ImmutableSortedMap<DocumentKey, Document> changes = localStore.handleUserChange(user);
+
+      Logger.debug("Ben handleCredentialChange", "Calling emitNewSnapsAndNotifyLocalStore.");
       emitNewSnapsAndNotifyLocalStore(changes, /*remoteEvent=*/ null);
     }
 

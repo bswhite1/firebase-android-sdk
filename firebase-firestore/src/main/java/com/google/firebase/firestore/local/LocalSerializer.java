@@ -30,6 +30,7 @@ import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.model.mutation.Mutation;
 import com.google.firebase.firestore.model.mutation.MutationBatch;
 import com.google.firebase.firestore.remote.RemoteSerializer;
+import com.google.firebase.firestore.util.Logger;
 import com.google.firestore.admin.v1.Index;
 import com.google.firestore.v1.DocumentTransform.FieldTransform;
 import com.google.firestore.v1.Write;
@@ -238,6 +239,9 @@ public final class LocalSerializer {
         rpcSerializer.decodeVersion(targetProto.getLastLimboFreeSnapshotVersion());
     ByteString resumeToken = targetProto.getResumeToken();
     long sequenceNumber = targetProto.getLastListenSequenceNumber();
+
+    Logger.debug("Ben decodeTargetData", "targetId: %d SnapshotVersion: %s lastLimboFreeSnapshotVersion: %s",
+            targetId, version, lastLimboFreeSnapshotVersion.toString());
 
     Target target;
     switch (targetProto.getTargetTypeCase()) {

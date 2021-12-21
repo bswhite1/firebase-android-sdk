@@ -71,6 +71,8 @@ public class QueryListener {
         !newSnapshot.getChanges().isEmpty() || newSnapshot.didSyncStateChange(),
         "We got a new snapshot with no changes?");
 
+//    Logger.debug("Ben QueryListener", "onViewSnapshot: %s", newSnapshot.toString());
+
     boolean raisedEvent = false;
     if (!options.includeDocumentMetadataChanges) {
       // Remove the metadata only changes

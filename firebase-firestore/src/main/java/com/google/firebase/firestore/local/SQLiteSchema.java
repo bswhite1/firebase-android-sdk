@@ -600,6 +600,10 @@ class SQLiteSchema {
 
               try {
                 Target targetProto = Target.parseFrom(targetProtoBytes);
+
+                Logger.debug("Ben rewriteCanonicalIds", "targetId: %d LastLimboFreeSnapshotVersion: %s",
+                        targetId, targetProto.getLastLimboFreeSnapshotVersion());
+
                 TargetData targetData = serializer.decodeTargetData(targetProto);
                 String updatedCanonicalId = targetData.getTarget().getCanonicalId();
                 db.execSQL(

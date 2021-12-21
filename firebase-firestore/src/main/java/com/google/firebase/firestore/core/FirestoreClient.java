@@ -172,6 +172,7 @@ public final class FirestoreClient {
   /** Starts listening to a query. */
   public QueryListener listen(
       Query query, ListenOptions options, EventListener<ViewSnapshot> listener) {
+    Logger.debug("Ben FirestoreClient", "listen query: %s", query.toTarget().toString());
     this.verifyNotTerminated();
     QueryListener queryListener = new QueryListener(query, options, listener);
     asyncQueue.enqueueAndForget(() -> eventManager.addQueryListener(queryListener));

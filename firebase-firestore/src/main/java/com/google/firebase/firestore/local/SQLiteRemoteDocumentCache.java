@@ -27,6 +27,7 @@ import com.google.firebase.firestore.model.ResourcePath;
 import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.util.BackgroundQueue;
 import com.google.firebase.firestore.util.Executors;
+import com.google.firebase.firestore.util.Logger;
 import com.google.protobuf.InvalidProtocolBufferException;
 import com.google.protobuf.MessageLite;
 import java.util.ArrayList;
@@ -57,6 +58,9 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
         !readTime.equals(SnapshotVersion.NONE),
         "Cannot add document to the RemoteDocumentCache with a read time of zero");
 
+    Logger.debug("Ben SQLiteRemoteDocumentCache", "add document: %s readTime %s",
+            document.getKey().getPath().canonicalString(), readTime.toString());
+
     String path = pathForKey(document.getKey());
     Timestamp timestamp = readTime.getTimestamp();
     MessageLite message = serializer.encodeMaybeDocument(document);
@@ -76,6 +80,10 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
   @Override
   public void remove(DocumentKey documentKey) {
     String path = pathForKey(documentKey);
+
+    Logger.debug("Ben SQLiteRemoteDocumentCache", "remove document: %s",
+            documentKey.getPath().canonicalString());
+
 
     db.execute("DELETE FROM remote_documents WHERE path = ?", path);
   }

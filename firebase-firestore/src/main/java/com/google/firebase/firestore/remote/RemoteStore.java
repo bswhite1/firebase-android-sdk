@@ -528,6 +528,8 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
         TargetData targetData = this.listenTargets.get(targetId);
         // A watched target might have been removed already.
         if (targetData != null) {
+          Logger.debug("Ben raiseWatchSnapshot", "targetId: %d SnapshotVersion: %s",
+                  targetId, snapshotVersion.toString());
           this.listenTargets.put(
               targetId, targetData.withResumeToken(targetChange.getResumeToken(), snapshotVersion));
         }
@@ -541,13 +543,20 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
       // A watched target might have been removed already.
       if (targetData != null) {
         // Clear the resume token for the query, since we're in a known mismatch state.
+        Logger.debug("Ben RemoteStore.raiseWatchSnapshot 2", "targetId: %d SnapshotVersion: %s",
+                targetId, targetData.getSnapshotVersion().toString());
+
+        /// Ben set snapshot version to none instead of targetData.getSnapshotVersion()  ?
         this.listenTargets.put(
             targetId,
-            targetData.withResumeToken(ByteString.EMPTY, targetData.getSnapshotVersion()));
+            targetData.withResumeToken(ByteString.EMPTY, SnapshotVersion.NONE));
 
         // Cause a hard reset by unwatching and rewatching immediately, but deliberately don't send
         // a resume token so that we get a full update.
         this.sendUnwatchRequest(targetId);
+
+        Logger.debug("Ben raiseWatchSnapshot", "targetId: %d SnapshotVersion: NONE lastLimboFreeSnapshotVersion: NONE",
+                targetId);
 
         // Mark the query we send as being on behalf of an existence filter  mismatch, but don't
         // actually retain that in listenTargets. This ensures that we flag the first re-listen this
@@ -563,6 +572,7 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
       }
     }
 
+    Logger.debug("Ben raiseWatchSnapshot", "Calling handleRemoteEvent.");
     // Finally raise remote event
     remoteStoreCallback.handleRemoteEvent(remoteEvent);
   }

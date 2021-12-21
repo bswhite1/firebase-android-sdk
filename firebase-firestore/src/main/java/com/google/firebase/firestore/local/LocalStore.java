@@ -408,6 +408,7 @@ public final class LocalStore implements BundleCallback {
         () -> {
           Map<Integer, TargetChange> targetChanges = remoteEvent.getTargetChanges();
           long sequenceNumber = persistence.getReferenceDelegate().getCurrentSequenceNumber();
+          Set<Integer> targetIdMismatches = remoteEvent.getTargetMismatches();
 
           for (Map.Entry<Integer, TargetChange> entry : targetChanges.entrySet()) {
             Integer boxedTargetId = entry.getKey();
@@ -422,21 +423,41 @@ public final class LocalStore implements BundleCallback {
             }
 
             targetCache.removeMatchingKeys(change.getRemovedDocuments(), targetId);
+
+            /// Ben changes are present here.
             targetCache.addMatchingKeys(change.getAddedDocuments(), targetId);
 
             ByteString resumeToken = change.getResumeToken();
             // Update the resume token if the change includes one.
             if (!resumeToken.isEmpty()) {
+
+              SnapshotVersion remoteSnapshotVersion = remoteEvent.getSnapshotVersion();
+
+              /// Ben update target cache via newTargetData here based on EXISTENCE_FILTER_MISMATCH.
+              if (targetIdMismatches.contains(targetId)) {
+                Logger.debug("Ben applyRemoteEvent", "detected EXISTENCE_FILTER_MISMATCH targetId: %d",
+                        targetId);
+                remoteSnapshotVersion = SnapshotVersion.NONE;
+              }
+
+              Logger.debug("Ben applyRemoteEvent", "newTargetData targetId: %d SnapshotVersion: %s",
+                      targetId, remoteSnapshotVersion.toString());
+
               TargetData newTargetData =
                   oldTargetData
-                      .withResumeToken(resumeToken, remoteEvent.getSnapshotVersion())
+                      .withResumeToken(resumeToken, remoteSnapshotVersion)
                       .withSequenceNumber(sequenceNumber);
               queryDataByTarget.put(targetId, newTargetData);
 
               // Update the query data if there are target changes (or if sufficient time has
               // passed since the last update).
               if (shouldPersistTargetData(oldTargetData, newTargetData, change)) {
+                Logger.debug("Ben applyRemoteEvent", "shouldPersistTargetData: true targetId: %d",
+                        targetId);
                 targetCache.updateTargetData(newTargetData);
+              } else {
+                Logger.debug("Ben applyRemoteEvent", "shouldPersistTargetData: false targetId: %d",
+                        targetId);
               }
             }
           }
@@ -448,10 +469,15 @@ public final class LocalStore implements BundleCallback {
             if (limboDocuments.contains(key)) {
               persistence.getReferenceDelegate().updateLimboDocument(key);
             }
+            Logger.debug("Ben applyRemoteEvent", " documentUpdates: %s",
+                    key.getPath().canonicalString());
           }
 
+          /// BEN this doesn't seem to think there are changes?
           DocumentChangeResult result =
               populateDocumentChanges(documentUpdates, null, remoteEvent.getSnapshotVersion());
+
+
           Map<DocumentKey, MutableDocument> changedDocs = result.changedDocuments;
 
           // HACK: The only reason we allow snapshot version NONE is so that we can synthesize
@@ -533,6 +559,14 @@ public final class LocalStore implements BundleCallback {
         hardAssert(
             !SnapshotVersion.NONE.equals(readTime),
             "Cannot add a document when the remote version is zero");
+
+        Logger.debug(
+                "LocalStore",
+                "update for %s. " + " previous version: %s  new version: %s",
+                key,
+                existingDoc.getVersion(),
+                doc.getVersion());
+
         remoteDocuments.add(doc, readTime);
         changedDocs.put(key, doc);
       } else {
@@ -610,6 +644,10 @@ public final class LocalStore implements BundleCallback {
 
               // Advance the last limbo free snapshot version
               SnapshotVersion lastLimboFreeSnapshotVersion = targetData.getSnapshotVersion();
+
+              Logger.debug("Ben notifyLocalViewChanges", "targetId: %d lastLimboFreeSnapshotVersion: %s",
+                      targetId, lastLimboFreeSnapshotVersion.toString());
+
               TargetData updatedTargetData =
                   targetData.withLastLimboFreeSnapshotVersion(lastLimboFreeSnapshotVersion);
               queryDataByTarget.put(targetId, updatedTargetData);
@@ -648,12 +686,17 @@ public final class LocalStore implements BundleCallback {
       // This query has been listened to previously, so reuse the previous targetID.
       // TODO: freshen last accessed date?
       targetId = cached.getTargetId();
+      Logger.debug("Ben allocateTarget", "targetId: %d",
+              targetId);
     } else {
       final AllocateQueryHolder holder = new AllocateQueryHolder();
+
       persistence.runTransaction(
           "Allocate target",
           () -> {
             holder.targetId = targetIdGenerator.nextId();
+            Logger.debug("Ben allocateTarget", "targetId: %d SnapshotVersion: NONE lastLimboFreeSnapshotVersion: NONE",
+                    holder.targetId);
             holder.cached =
                 new TargetData(
                     target,
@@ -681,9 +724,12 @@ public final class LocalStore implements BundleCallback {
   @Nullable
   TargetData getTargetData(Target target) {
     Integer targetId = targetIdByTarget.get(target);
+
     if (targetId != null) {
+      Logger.debug("Ben LocalStore.getTargetData", "targetIdByTarget targetId: %d", targetId);
       return queryDataByTarget.get(targetId);
     }
+    Logger.debug("Ben LocalStore.getTargetData", "targetIdByTarget targetId: NULL");
     return targetCache.getTargetData(target);
   }
 
@@ -761,8 +807,12 @@ public final class LocalStore implements BundleCallback {
           // Only update the matching documents if it is newer than what the SDK already has
           if (namedQuery.getReadTime().compareTo(existingTargetData.getSnapshotVersion()) > 0) {
             // Update existing target data because the query from the bundle is newer.
+            Logger.debug("Ben saveNamedQuery", "targetId: %d SnapshotVersion: %s",
+                    targetId, namedQuery.getReadTime().toString());
+
             TargetData newTargetData =
                 existingTargetData.withResumeToken(ByteString.EMPTY, namedQuery.getReadTime());
+
             queryDataByTarget.append(targetId, newTargetData);
 
             targetCache.updateTargetData(newTargetData);
@@ -845,9 +895,24 @@ public final class LocalStore implements BundleCallback {
     SnapshotVersion lastLimboFreeSnapshotVersion = SnapshotVersion.NONE;
     ImmutableSortedSet<DocumentKey> remoteKeys = DocumentKey.emptyKeySet();
 
+    Logger.debug("Ben executeQuery", "query: %s filters: %s usePreviousResults: %s", query.getPath().canonicalString(), query.getFilters().toString(), usePreviousResults);
+
+    Logger.debug("Ben executeQuery", "     query.toTarget(): %s", query.toTarget().toString());
+
+
     if (targetData != null) {
+      Logger.debug("Ben executeQuery", "     targetId: %s snapshotVersion: %s lastLimboFreeSnapshotVersion: %s", targetData.getTargetId(), targetData.getSnapshotVersion().toString(),targetData.getLastLimboFreeSnapshotVersion().toString());
+
       lastLimboFreeSnapshotVersion = targetData.getLastLimboFreeSnapshotVersion();
       remoteKeys = this.targetCache.getMatchingKeysForTargetId(targetData.getTargetId());
+
+      Logger.debug("Ben executeQuery", "     remoteKeys");
+
+      for ( DocumentKey documentKey : remoteKeys) {
+        Logger.debug("Ben executeQuery", "        targetCache: %s", documentKey.getPath().canonicalString());
+      }
+    } else {
+      Logger.debug("Ben executeQuery", "     targetData is null");
     }
 
     ImmutableSortedMap<DocumentKey, Document> documents =

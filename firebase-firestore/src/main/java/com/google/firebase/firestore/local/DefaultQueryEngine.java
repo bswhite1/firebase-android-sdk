@@ -65,6 +65,10 @@ public class DefaultQueryEngine implements QueryEngine {
       ImmutableSortedSet<DocumentKey> remoteKeys) {
     hardAssert(localDocumentsView != null, "setLocalDocumentsView() not called");
 
+//    Logger.debug("Ben DefaultQueryEngine", "getDocumentsMatchingQuery forcing executeFullCollectionScan");
+//
+//    return executeFullCollectionScan(query);
+
     // Queries that match all documents don't benefit from using key-based lookups. It is more
     // efficient to scan all documents in a collection, rather than to perform individual lookups.
     if (query.matchesAllDocuments()) {
@@ -74,12 +78,28 @@ public class DefaultQueryEngine implements QueryEngine {
     // Queries that have never seen a snapshot without limbo free documents should also be run as a
     // full collection scan.
     if (lastLimboFreeSnapshotVersion.equals(SnapshotVersion.NONE)) {
+
+      Logger.debug("Ben DefaultQueryEngine", "forcing executeFullCollectionScan");
+
       return executeFullCollectionScan(query);
     }
 
     ImmutableSortedMap<DocumentKey, Document> documents =
         localDocumentsView.getDocuments(remoteKeys);
+
+    Logger.debug("Ben getDocumentsMatchingQuery", "localDocumentsView");
+
+    for ( Map.Entry<DocumentKey, Document> document : documents) {
+      Logger.debug("Ben getDocumentsMatchingQuery", "     targetCache: %s", document.getKey().getPath().canonicalString());
+    }
+
     ImmutableSortedSet<Document> previousResults = applyQuery(query, documents);
+
+    Logger.debug("Ben getDocumentsMatchingQuery", "previousResults");
+
+    for ( Document document : previousResults) {
+      Logger.debug("Ben getDocumentsMatchingQuery", "     previousResults: %s", document.getKey().getPath().canonicalString());
+    }
 
     if ((query.hasLimitToFirst() || query.hasLimitToLast())
         && needsRefill(
@@ -100,10 +120,22 @@ public class DefaultQueryEngine implements QueryEngine {
     ImmutableSortedMap<DocumentKey, Document> updatedResults =
         localDocumentsView.getDocumentsMatchingQuery(query, lastLimboFreeSnapshotVersion);
 
+    Logger.debug("Ben getDocumentsMatchingQuery", "updatedResults");
+
+    for ( Map.Entry<DocumentKey, Document> document : updatedResults) {
+      Logger.debug("Ben getDocumentsMatchingQuery", "     updatedResults: %s", document.getKey().getPath().canonicalString());
+    }
+
     // We merge `previousResults` into `updateResults`, since `updateResults` is already a
     // ImmutableSortedMap. If a document is contained in both lists, then its contents are the same.
     for (Document result : previousResults) {
       updatedResults = updatedResults.insert(result.getKey(), result);
+    }
+
+    Logger.debug("Ben getDocumentsMatchingQuery", "Merged Results");
+
+    for ( Map.Entry<DocumentKey, Document> document : updatedResults) {
+      Logger.debug("Ben getDocumentsMatchingQuery", "     Merged Results: %s", document.getKey().getPath().canonicalString());
     }
 
     return updatedResults;

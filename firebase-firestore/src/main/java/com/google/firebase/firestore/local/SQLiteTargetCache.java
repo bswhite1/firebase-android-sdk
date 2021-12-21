@@ -26,6 +26,7 @@ import com.google.firebase.firestore.core.Target;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.util.Consumer;
+import com.google.firebase.firestore.util.Logger;
 import com.google.protobuf.InvalidProtocolBufferException;
 
 /** Cached Queries backed by SQLite. */
@@ -102,6 +103,9 @@ final class SQLiteTargetCache implements TargetCache {
     com.google.firebase.firestore.proto.Target targetProto =
         localSerializer.encodeTargetData(targetData);
 
+    Logger.debug("Ben SQLiteTargetCache", "saveTargetData target: %d SnapshotVersion: %s",
+            targetId, targetData.getSnapshotVersion().toString());
+
     db.execute(
         "INSERT OR REPLACE INTO targets ("
             + "target_id, "
@@ -169,6 +173,9 @@ final class SQLiteTargetCache implements TargetCache {
   }
 
   private void removeTarget(int targetId) {
+    Logger.debug("Ben SQLiteTargetCache", "removeTarget target: %d",
+            targetId);
+
     removeMatchingKeysForTargetId(targetId);
     db.execute("DELETE FROM targets WHERE target_id = ?", targetId);
     targetCount--;
@@ -177,6 +184,10 @@ final class SQLiteTargetCache implements TargetCache {
   @Override
   public void removeTargetData(TargetData targetData) {
     int targetId = targetData.getTargetId();
+
+    Logger.debug("Ben SQLiteTargetCache", "removeTargetData target: %d",
+            targetId);
+
     removeTarget(targetId);
     writeMetadata();
   }
@@ -197,6 +208,10 @@ final class SQLiteTargetCache implements TargetCache {
             row -> {
               int targetId = row.getInt(0);
               if (activeTargetIds.get(targetId) == null) {
+
+                Logger.debug("Ben SQLiteTargetCache", "removeQueries target: %d",
+                        targetId);
+
                 removeTarget(targetId);
                 count[0]++;
               }
@@ -235,6 +250,8 @@ final class SQLiteTargetCache implements TargetCache {
 
   private TargetData decodeTargetData(byte[] bytes) {
     try {
+      Logger.debug("Ben decodeTargetData", "calling localSerializer.decodeTargetData");
+
       return localSerializer.decodeTargetData(
           com.google.firebase.firestore.proto.Target.parseFrom(bytes));
     } catch (InvalidProtocolBufferException e) {
@@ -246,6 +263,14 @@ final class SQLiteTargetCache implements TargetCache {
 
   @Override
   public void addMatchingKeys(ImmutableSortedSet<DocumentKey> keys, int targetId) {
+
+    Logger.debug("Ben SQLiteTargetCache", "addMatchingKeys target: %d",
+            targetId);
+
+    for ( DocumentKey documentKey : keys) {
+      Logger.debug("Ben SQLiteTargetCache", "     addDoc: %s", documentKey.getPath().canonicalString());
+    }
+
     // PORTING NOTE: The reverse index (document_targets) is maintained by SQLite.
 
     // When updates come in we treat those as added keys, which means these inserts won't
@@ -266,6 +291,13 @@ final class SQLiteTargetCache implements TargetCache {
 
   @Override
   public void removeMatchingKeys(ImmutableSortedSet<DocumentKey> keys, int targetId) {
+
+    Logger.debug("Ben SQLiteTargetCache", "removeMatchingKeys target: %d", targetId);
+
+    for ( DocumentKey documentKey : keys) {
+      Logger.debug("Ben SQLiteTargetCache", "     removeDoc: %s", documentKey.getPath().canonicalString());
+    }
+
     // PORTING NOTE: The reverse index (document_targets) is maintained by SQLite.
     SQLiteStatement deleter =
         db.prepare("DELETE FROM target_documents WHERE target_id = ? AND path = ?");
@@ -280,12 +312,19 @@ final class SQLiteTargetCache implements TargetCache {
 
   @Override
   public void removeMatchingKeysForTargetId(int targetId) {
+
+    Logger.debug("Ben SQLiteTargetCache", "removeMatchingKeysForTargetId target: %d", targetId);
+
     db.execute("DELETE FROM target_documents WHERE target_id = ?", targetId);
   }
 
   @Override
   public ImmutableSortedSet<DocumentKey> getMatchingKeysForTargetId(int targetId) {
     final DocumentKeysHolder holder = new DocumentKeysHolder();
+
+    Logger.debug("Ben SQLiteTargetCache", "getMatchingKeysForTargetId target: %d", targetId);
+
+
     db.query("SELECT path FROM target_documents WHERE target_id = ?")
         .binding(targetId)
         .forEach(

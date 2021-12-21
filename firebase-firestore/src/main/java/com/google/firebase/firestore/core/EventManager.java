@@ -18,6 +18,7 @@ import static com.google.firebase.firestore.util.Assert.hardAssert;
 
 import com.google.firebase.firestore.EventListener;
 import com.google.firebase.firestore.core.SyncEngine.SyncEngineCallback;
+import com.google.firebase.firestore.util.Logger;
 import com.google.firebase.firestore.util.Util;
 import io.grpc.Status;
 import java.util.ArrayList;
@@ -99,6 +100,8 @@ public final class EventManager implements SyncEngineCallback {
         raiseSnapshotsInSyncEvent();
       }
     }
+
+    Logger.debug("Ben EventManager", "addQueryListener query: %s firstListen: %s", query.toTarget().toString(), firstListen);
 
     if (firstListen) {
       queryInfo.targetId = syncEngine.listen(query);

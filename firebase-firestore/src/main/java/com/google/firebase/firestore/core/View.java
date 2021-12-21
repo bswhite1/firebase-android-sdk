@@ -99,6 +99,11 @@ public class View {
     syncedDocuments = remoteDocuments;
     limboDocuments = DocumentKey.emptyKeySet();
     mutatedKeys = DocumentKey.emptyKeySet();
+
+    Logger.debug("Ben View", "New View. query: %s filters: %s", query.getPath().canonicalString(), query.getFilters().toString());
+    for ( DocumentKey documentKey : syncedDocuments) {
+      Logger.debug("Ben View", "     syncedDocuments: %s", documentKey.getPath().canonicalString());
+    }
   }
 
   public SyncState getSyncState() {
@@ -331,7 +336,7 @@ public class View {
       // syncState and generate a ViewChange as appropriate. We are guaranteed to get a new
       // TargetChange that sets `current` back to true once the client is back online.
       this.current = false;
-      Logger.debug("Ben applyOnlineStateChange", "Calling applyChanges.");
+      Logger.debug("Ben applyOnlineStateChange", "Calling applyChanges. current = false");
 
       return applyChanges(
           new DocumentChanges(
@@ -356,7 +361,9 @@ public class View {
       for (DocumentKey documentKey : targetChange.getRemovedDocuments()) {
         syncedDocuments = syncedDocuments.remove(documentKey);
       }
+
       current = targetChange.isCurrent();
+      Logger.debug("Ben applyTargetChange", "current = %s", current);
     }
   }
 

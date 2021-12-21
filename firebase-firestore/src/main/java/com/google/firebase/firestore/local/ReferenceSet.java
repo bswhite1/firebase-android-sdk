@@ -18,6 +18,8 @@ import static java.util.Collections.emptyList;
 
 import com.google.firebase.database.collection.ImmutableSortedSet;
 import com.google.firebase.firestore.model.DocumentKey;
+import com.google.firebase.firestore.util.Logger;
+
 import java.util.Iterator;
 
 /**
@@ -116,6 +118,8 @@ public class ReferenceSet {
   public ImmutableSortedSet<DocumentKey> referencesForId(int target) {
     DocumentKey emptyKey = DocumentKey.empty();
     DocumentReference startRef = new DocumentReference(emptyKey, target);
+
+    Logger.debug("Ben ReferenceSet", "referencesForId target: %d", target);
 
     Iterator<DocumentReference> iterator = referencesByTarget.iteratorFrom(startRef);
     ImmutableSortedSet<DocumentKey> keys = DocumentKey.emptyKeySet();

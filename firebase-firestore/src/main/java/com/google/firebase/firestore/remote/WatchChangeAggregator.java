@@ -29,6 +29,8 @@ import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.remote.WatchChange.DocumentChange;
 import com.google.firebase.firestore.remote.WatchChange.ExistenceFilterWatchChange;
 import com.google.firebase.firestore.remote.WatchChange.WatchTargetChange;
+import com.google.firebase.firestore.util.Logger;
+
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -102,6 +104,8 @@ public class WatchChangeAggregator {
     for (int targetId : getTargetIds(targetChange)) {
       TargetState targetState = ensureTargetState(targetId);
 
+      Logger.debug("Ben handleTargetChange", "targetId: %d ChangeType: %s", targetId, targetChange.getChangeType().toString());
+
       switch (targetChange.getChangeType()) {
         case NoChange:
           if (isActiveTarget(targetId)) {
@@ -133,6 +137,7 @@ public class WatchChangeAggregator {
           break;
         case Current:
           if (isActiveTarget(targetId)) {
+            Logger.debug("Ben handleTargetChange", "targetState.markCurrent targetId: %d", targetId);
             targetState.markCurrent();
             targetState.updateResumeToken(targetChange.getResumeToken());
           }
