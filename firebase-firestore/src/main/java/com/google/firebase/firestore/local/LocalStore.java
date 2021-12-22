@@ -432,21 +432,24 @@ public final class LocalStore implements BundleCallback {
             if (!resumeToken.isEmpty()) {
 
               SnapshotVersion remoteSnapshotVersion = remoteEvent.getSnapshotVersion();
+              SnapshotVersion lastLimboFreeSnapshotVersion = oldTargetData.getLastLimboFreeSnapshotVersion();
 
               /// Ben update target cache via newTargetData here based on EXISTENCE_FILTER_MISMATCH.
               if (targetIdMismatches.contains(targetId)) {
                 Logger.debug("Ben applyRemoteEvent", "detected EXISTENCE_FILTER_MISMATCH targetId: %d",
                         targetId);
                 remoteSnapshotVersion = SnapshotVersion.NONE;
+                lastLimboFreeSnapshotVersion = SnapshotVersion.NONE;
               }
 
-              Logger.debug("Ben applyRemoteEvent", "newTargetData targetId: %d SnapshotVersion: %s",
-                      targetId, remoteSnapshotVersion.toString());
+              Logger.debug("Ben applyRemoteEvent", "newTargetData targetId: %d SnapshotVersion: %s lastLimboFreeSnapshotVersion: %s",
+                      targetId, remoteSnapshotVersion.toString(), lastLimboFreeSnapshotVersion.toString());
 
               TargetData newTargetData =
                   oldTargetData
                       .withResumeToken(resumeToken, remoteSnapshotVersion)
-                      .withSequenceNumber(sequenceNumber);
+                      .withSequenceNumber(sequenceNumber)
+                      .withLastLimboFreeSnapshotVersion(lastLimboFreeSnapshotVersion);
               queryDataByTarget.put(targetId, newTargetData);
 
               // Update the query data if there are target changes (or if sufficient time has
