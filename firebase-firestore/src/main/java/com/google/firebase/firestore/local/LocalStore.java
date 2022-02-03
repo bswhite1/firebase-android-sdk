@@ -423,46 +423,78 @@ public final class LocalStore implements BundleCallback {
             }
 
             targetCache.removeMatchingKeys(change.getRemovedDocuments(), targetId);
-
-            /// Ben changes are present here.
             targetCache.addMatchingKeys(change.getAddedDocuments(), targetId);
 
-            ByteString resumeToken = change.getResumeToken();
-            // Update the resume token if the change includes one.
-            if (!resumeToken.isEmpty()) {
+            TargetData newTargetData = oldTargetData.withSequenceNumber(sequenceNumber);
+            if (remoteEvent.getTargetMismatches().contains(targetId)) {
+              newTargetData =
+                      newTargetData
+                              .withResumeToken(ByteString.EMPTY, SnapshotVersion.NONE)
+                              .withLastLimboFreeSnapshotVersion(SnapshotVersion.NONE);
+            } else if (!change.getResumeToken().isEmpty()) {
+              newTargetData =
+                      newTargetData.withResumeToken(
+                              change.getResumeToken(), remoteEvent.getSnapshotVersion());
+            }
 
-              SnapshotVersion remoteSnapshotVersion = remoteEvent.getSnapshotVersion();
-              SnapshotVersion lastLimboFreeSnapshotVersion = oldTargetData.getLastLimboFreeSnapshotVersion();
+            Logger.debug("Ben applyRemoteEvent", "newTargetData targetId: %d SnapshotVersion: %s lastLimboFreeSnapshotVersion: %s",
+              targetId, newTargetData.getSnapshotVersion().toString(), newTargetData.getLastLimboFreeSnapshotVersion().toString());
 
-              /// Ben update target cache via newTargetData here based on EXISTENCE_FILTER_MISMATCH.
-              if (targetIdMismatches.contains(targetId)) {
-                Logger.debug("Ben applyRemoteEvent", "detected EXISTENCE_FILTER_MISMATCH targetId: %d",
+
+            queryDataByTarget.put(targetId, newTargetData);
+
+            // Update the query data if there are target changes (or if sufficient time has passed
+            // since the last update).
+            if (shouldPersistTargetData(oldTargetData, newTargetData, change)) {
+              Logger.debug("Ben applyRemoteEvent", "shouldPersistTargetData: true targetId: %d",
                         targetId);
-                remoteSnapshotVersion = SnapshotVersion.NONE;
-                lastLimboFreeSnapshotVersion = SnapshotVersion.NONE;
-              }
-
-              Logger.debug("Ben applyRemoteEvent", "newTargetData targetId: %d SnapshotVersion: %s lastLimboFreeSnapshotVersion: %s",
-                      targetId, remoteSnapshotVersion.toString(), lastLimboFreeSnapshotVersion.toString());
-
-              TargetData newTargetData =
-                  oldTargetData
-                      .withResumeToken(resumeToken, remoteSnapshotVersion)
-                      .withSequenceNumber(sequenceNumber)
-                      .withLastLimboFreeSnapshotVersion(lastLimboFreeSnapshotVersion);
-              queryDataByTarget.put(targetId, newTargetData);
-
-              // Update the query data if there are target changes (or if sufficient time has
-              // passed since the last update).
-              if (shouldPersistTargetData(oldTargetData, newTargetData, change)) {
-                Logger.debug("Ben applyRemoteEvent", "shouldPersistTargetData: true targetId: %d",
-                        targetId);
-                targetCache.updateTargetData(newTargetData);
-              } else {
+              targetCache.updateTargetData(newTargetData);
+            } else {
                 Logger.debug("Ben applyRemoteEvent", "shouldPersistTargetData: false targetId: %d",
                         targetId);
-              }
             }
+
+//            targetCache.removeMatchingKeys(change.getRemovedDocuments(), targetId);
+//
+//            /// Ben changes are present here.
+//            targetCache.addMatchingKeys(change.getAddedDocuments(), targetId);
+//
+//            ByteString resumeToken = change.getResumeToken();
+//            // Update the resume token if the change includes one.
+//            if (!resumeToken.isEmpty()) {
+//
+//              SnapshotVersion remoteSnapshotVersion = remoteEvent.getSnapshotVersion();
+//              SnapshotVersion lastLimboFreeSnapshotVersion = oldTargetData.getLastLimboFreeSnapshotVersion();
+//
+//              /// Ben update target cache via newTargetData here based on EXISTENCE_FILTER_MISMATCH.
+//              if (targetIdMismatches.contains(targetId)) {
+//                Logger.debug("Ben applyRemoteEvent", "detected EXISTENCE_FILTER_MISMATCH targetId: %d",
+//                        targetId);
+//                remoteSnapshotVersion = SnapshotVersion.NONE;
+//                lastLimboFreeSnapshotVersion = SnapshotVersion.NONE;
+//              }
+//
+//              Logger.debug("Ben applyRemoteEvent", "newTargetData targetId: %d SnapshotVersion: %s lastLimboFreeSnapshotVersion: %s",
+//                      targetId, remoteSnapshotVersion.toString(), lastLimboFreeSnapshotVersion.toString());
+//
+//              TargetData newTargetData =
+//                  oldTargetData
+//                      .withResumeToken(resumeToken, remoteSnapshotVersion)
+//                      .withSequenceNumber(sequenceNumber)
+//                      .withLastLimboFreeSnapshotVersion(lastLimboFreeSnapshotVersion);
+//              queryDataByTarget.put(targetId, newTargetData);
+//
+//              // Update the query data if there are target changes (or if sufficient time has
+//              // passed since the last update).
+//              if (shouldPersistTargetData(oldTargetData, newTargetData, change)) {
+//                Logger.debug("Ben applyRemoteEvent", "shouldPersistTargetData: true targetId: %d",
+//                        targetId);
+//                targetCache.updateTargetData(newTargetData);
+//              } else {
+//                Logger.debug("Ben applyRemoteEvent", "shouldPersistTargetData: false targetId: %d",
+//                        targetId);
+//              }
+//            }
           }
 
           Map<DocumentKey, MutableDocument> documentUpdates = remoteEvent.getDocumentUpdates();
@@ -596,9 +628,9 @@ public final class LocalStore implements BundleCallback {
    */
   private static boolean shouldPersistTargetData(
       TargetData oldTargetData, TargetData newTargetData, TargetChange change) {
-    hardAssert(
-        !newTargetData.getResumeToken().isEmpty(),
-        "Attempted to persist query data with empty resume token");
+//    hardAssert(
+//        !newTargetData.getResumeToken().isEmpty(),
+//        "Attempted to persist query data with empty resume token");
 
     // Always persist query data if we don't already have a resume token.
     if (oldTargetData.getResumeToken().isEmpty()) return true;
