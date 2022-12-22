@@ -17,6 +17,7 @@ package com.google.firebase.firestore.local;
 import static com.google.firebase.firestore.util.Assert.hardAssert;
 
 import com.google.firebase.firestore.auth.User;
+import com.google.firebase.firestore.util.Logger;
 import com.google.firebase.firestore.util.Supplier;
 import java.util.HashMap;
 import java.util.Map;
@@ -146,6 +147,9 @@ public final class MemoryPersistence extends Persistence {
 
   @Override
   void runTransaction(String action, Runnable operation) {
+
+    Logger.debug("Ben_MemoryPersistence", "Entered runTransaction 1");
+
     referenceDelegate.onTransactionStarted();
     try {
       operation.run();
@@ -156,6 +160,9 @@ public final class MemoryPersistence extends Persistence {
 
   @Override
   <T> T runTransaction(String action, Supplier<T> operation) {
+
+    Logger.debug("Ben_MemoryPersistence", "Entered runTransaction 2");
+
     referenceDelegate.onTransactionStarted();
     T result;
     try {

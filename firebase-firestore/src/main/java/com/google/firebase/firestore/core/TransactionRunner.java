@@ -24,6 +24,7 @@ import com.google.firebase.firestore.util.AsyncQueue;
 import com.google.firebase.firestore.util.AsyncQueue.TimerId;
 import com.google.firebase.firestore.util.ExponentialBackoff;
 import com.google.firebase.firestore.util.Function;
+import com.google.firebase.firestore.util.Logger;
 
 /** TransactionRunner encapsulates the logic needed to run and retry transactions with backoff. */
 public class TransactionRunner<TResult> {
@@ -51,11 +52,17 @@ public class TransactionRunner<TResult> {
 
   /** Runs the transaction and returns a Task containing the result. */
   public Task<TResult> run() {
+
+      Logger.debug("Ben_TransactionRunner", "Entered run");
+
     runWithBackoff();
     return taskSource.getTask();
   }
 
   private void runWithBackoff() {
+
+      Logger.debug("Ben_TransactionRunner", "Entered runWithBackoff");
+
     attemptsRemaining -= 1;
     backoff.backoffAndRun(
         () -> {
@@ -85,6 +92,9 @@ public class TransactionRunner<TResult> {
   }
 
   private void handleTransactionError(Task task) {
+
+      Logger.debug("Ben_TransactionRunner", "Entered handleTransactionError");
+
     if (attemptsRemaining > 0 && isRetryableTransactionError(task.getException())) {
       runWithBackoff();
     } else {
@@ -93,6 +103,9 @@ public class TransactionRunner<TResult> {
   }
 
   private static boolean isRetryableTransactionError(Exception e) {
+
+      Logger.debug("Ben_TransactionRunner", "Entered isRetryableTransactionError");
+
     if (e instanceof FirebaseFirestoreException) {
       // In transactions, the backend will fail outdated reads with FAILED_PRECONDITION and
       // non-matching document versions with ABORTED. These errors should be retried.

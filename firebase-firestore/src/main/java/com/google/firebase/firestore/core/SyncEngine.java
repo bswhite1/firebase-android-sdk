@@ -308,6 +308,7 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
    */
   public <TResult> Task<TResult> transaction(
       AsyncQueue asyncQueue, Function<Transaction, Task<TResult>> updateFunction) {
+    Logger.debug("Ben_SyncEngine", "Entered transaction");
     return new TransactionRunner<TResult>(asyncQueue, remoteStore, updateFunction).run();
   }
 

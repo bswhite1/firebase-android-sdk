@@ -420,6 +420,8 @@ public class FirebaseFirestore {
       Transaction.Function<ResultT> updateFunction, Executor executor) {
     ensureClientConfigured();
 
+    Logger.debug("Ben_FirebaseFirestore", "Entered runTransaction 1");
+
     // We wrap the function they provide in order to
     // 1. Use internal implementation classes for Transaction,
     // 2. Convert exceptions they throw into Tasks, and
@@ -431,6 +433,8 @@ public class FirebaseFirestore {
                 () ->
                     updateFunction.apply(
                         new Transaction(internalTransaction, FirebaseFirestore.this)));
+
+    Logger.debug("Ben_FirebaseFirestore", "runTransaction calling client.transaction");
 
     return client.transaction(wrappedUpdateFunction);
   }
@@ -447,6 +451,9 @@ public class FirebaseFirestore {
   public <TResult> Task<TResult> runTransaction(
       @NonNull Transaction.Function<TResult> updateFunction) {
     checkNotNull(updateFunction, "Provided transaction update function must not be null.");
+
+    Logger.debug("Ben_FirebaseFirestore", "Entered runTransaction 2");
+
     return runTransaction(
         updateFunction, com.google.firebase.firestore.core.Transaction.getDefaultExecutor());
   }

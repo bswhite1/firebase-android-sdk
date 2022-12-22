@@ -208,13 +208,19 @@ public final class SQLitePersistence extends Persistence {
   @Override
   void runTransaction(String action, Runnable operation) {
     Logger.debug(TAG, "Starting transaction: %s", action);
+
+    Logger.debug("Ben_SQLitePersistence", "Entered runTransaction 1");
+
     db.beginTransactionWithListener(transactionListener);
     try {
+      Logger.debug("Ben_SQLitePersistence", "runTransaction 1 operation.run");
       operation.run();
 
+      Logger.debug("Ben_SQLitePersistence", "runTransaction 1 operation.run successful");
       // Note that an exception in operation.run() will prevent this code from running.
       db.setTransactionSuccessful();
     } finally {
+      Logger.debug("Ben_SQLitePersistence", "runTransaction 1 operation.run end");
       db.endTransaction();
     }
   }
@@ -222,14 +228,20 @@ public final class SQLitePersistence extends Persistence {
   @Override
   <T> T runTransaction(String action, Supplier<T> operation) {
     Logger.debug(TAG, "Starting transaction: %s", action);
+
+    Logger.debug("Ben_SQLitePersistence", "Entered runTransaction 2");
+
     T value = null;
     db.beginTransactionWithListener(transactionListener);
     try {
+      Logger.debug("Ben_SQLitePersistence", "runTransaction 2 operation.get");
       value = operation.get();
+      Logger.debug("Ben_SQLitePersistence", "runTransaction 2 operation.get successful");
 
       // Note that an exception in operation.run() will prevent this code from running.
       db.setTransactionSuccessful();
     } finally {
+      Logger.debug("Ben_SQLitePersistence", "runTransaction 2 operation.get end");
       db.endTransaction();
     }
     return value;

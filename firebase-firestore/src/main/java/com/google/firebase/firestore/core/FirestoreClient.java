@@ -230,6 +230,7 @@ public final class FirestoreClient {
   /** Tries to execute the transaction in updateFunction. */
   public <TResult> Task<TResult> transaction(Function<Transaction, Task<TResult>> updateFunction) {
     this.verifyNotTerminated();
+    Logger.debug("Ben_Firebase", "transaction calling AsyncQueue.callTask");
     return AsyncQueue.callTask(
         asyncQueue.getExecutor(), () -> syncEngine.transaction(asyncQueue, updateFunction));
   }
