@@ -16,7 +16,6 @@ package com.google.firebase.firestore.model;
 
 import static com.google.firebase.firestore.testutil.TestUtil.assertDoesNotThrow;
 import static com.google.firebase.firestore.testutil.TestUtil.expectError;
-import static com.google.firebase.firestore.testutil.TestUtil.field;
 import static com.google.firebase.firestore.testutil.TestUtil.fieldIndex;
 import static com.google.firebase.firestore.testutil.TestUtil.filter;
 import static com.google.firebase.firestore.testutil.TestUtil.orderBy;
@@ -84,6 +83,17 @@ public class TargetIndexMatcherTest {
     validateServesTarget(q, "a", FieldIndex.Segment.Kind.ASCENDING);
     validateServesTarget(
         q, "a", FieldIndex.Segment.Kind.ASCENDING, "b", FieldIndex.Segment.Kind.ASCENDING);
+  }
+
+  @Test
+  public void cannotUsePartialIndexWithMissingArrayContains() {
+    Query q = query("collId").filter(filter("a", "array-contains", "a")).orderBy(orderBy("b"));
+    validateServesTarget(
+        q, "a", FieldIndex.Segment.Kind.CONTAINS, "b", FieldIndex.Segment.Kind.ASCENDING);
+
+    q = query("collId").orderBy(orderBy("b"));
+    validateDoesNotServeTarget(
+        q, "a", FieldIndex.Segment.Kind.CONTAINS, "b", FieldIndex.Segment.Kind.ASCENDING);
   }
 
   @Test

@@ -18,6 +18,7 @@ import androidx.annotation.NonNull;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.firebase.firestore.FirebaseFirestoreException;
+import com.google.firebase.firestore.TransactionOptions;
 import com.google.firebase.firestore.remote.Datastore;
 import com.google.firebase.firestore.remote.RemoteStore;
 import com.google.firebase.firestore.util.AsyncQueue;
@@ -28,7 +29,6 @@ import com.google.firebase.firestore.util.Logger;
 
 /** TransactionRunner encapsulates the logic needed to run and retry transactions with backoff. */
 public class TransactionRunner<TResult> {
-  public static final int DEFAULT_MAX_ATTEMPTS_COUNT = 5;
   private AsyncQueue asyncQueue;
   private RemoteStore remoteStore;
   private Function<Transaction, Task<TResult>> updateFunction;
@@ -40,12 +40,13 @@ public class TransactionRunner<TResult> {
   public TransactionRunner(
       AsyncQueue asyncQueue,
       RemoteStore remoteStore,
+      TransactionOptions options,
       Function<Transaction, Task<TResult>> updateFunction) {
 
     this.asyncQueue = asyncQueue;
     this.remoteStore = remoteStore;
     this.updateFunction = updateFunction;
-    this.attemptsRemaining = DEFAULT_MAX_ATTEMPTS_COUNT;
+    this.attemptsRemaining = options.getMaxAttempts();
 
     backoff = new ExponentialBackoff(asyncQueue, TimerId.RETRY_TRANSACTION);
   }
@@ -107,10 +108,12 @@ public class TransactionRunner<TResult> {
       Logger.debug("Ben_TransactionRunner", "Entered isRetryableTransactionError");
 
     if (e instanceof FirebaseFirestoreException) {
-      // In transactions, the backend will fail outdated reads with FAILED_PRECONDITION and
-      // non-matching document versions with ABORTED. These errors should be retried.
+      // In transactions, the backend will fail outdated reads with FAILED_PRECONDITION,
+      // non-matching document versions with ABORTED, and attempts to create already exists with
+      // ALREADY_EXISTS. These errors should be retried.
       FirebaseFirestoreException.Code code = ((FirebaseFirestoreException) e).getCode();
       return code == FirebaseFirestoreException.Code.ABORTED
+          || code == FirebaseFirestoreException.Code.ALREADY_EXISTS
           || code == FirebaseFirestoreException.Code.FAILED_PRECONDITION
           || !Datastore.isPermanentError(((FirebaseFirestoreException) e).getCode());
     }

@@ -44,8 +44,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -71,7 +71,7 @@ public class IndexBackfillerTest {
   public void setUp() {
     persistence = PersistenceTestHelpers.createSQLitePersistence();
     remoteDocumentCache = persistence.getRemoteDocumentCache();
-    documentOverlayCache = persistence.getDocumentOverlay(User.UNAUTHENTICATED);
+    documentOverlayCache = persistence.getDocumentOverlayCache(User.UNAUTHENTICATED);
     indexManager = persistence.getIndexManager(User.UNAUTHENTICATED);
     indexManager.start();
 
@@ -83,9 +83,9 @@ public class IndexBackfillerTest {
             persistence.getMutationQueue(User.UNAUTHENTICATED, indexManager),
             documentOverlayCache,
             indexManager);
-    backfiller = new IndexBackfiller(persistence, new AsyncQueue());
-    backfiller.setIndexManager(indexManager);
-    backfiller.setLocalDocumentsView(localDocumentsView);
+    backfiller =
+        new IndexBackfiller(
+            persistence, new AsyncQueue(), () -> indexManager, () -> localDocumentsView);
   }
 
   @After
@@ -165,7 +165,6 @@ public class IndexBackfillerTest {
     backfiller.setMaxDocumentsToProcess(2);
 
     addFieldIndex("coll1", "foo");
-    Target target = query("coll1").orderBy(orderBy("foo")).toTarget();
     addDoc("coll1/docA", version(5), "foo", 1);
     addDoc("coll1/docB", version(3), "foo", 1);
     addDoc("coll1/docC", version(10), "foo", 1);
@@ -186,7 +185,6 @@ public class IndexBackfillerTest {
     backfiller.setMaxDocumentsToProcess(2);
 
     addFieldIndex("coll1", "foo");
-    Target target = query("coll1").orderBy(orderBy("foo")).toTarget();
     addDoc("coll1/docA", version(1), "foo", 1);
     addDoc("coll1/docB", version(1), "foo", 1);
     addDoc("coll1/docC", version(1), "foo", 1);
@@ -363,7 +361,7 @@ public class IndexBackfillerTest {
 
     // Update doc to new remote version with new value.
     addDoc("coll/doc", version(40), "foo", 2);
-    documentsProcessed = backfiller.backfill();
+    backfiller.backfill();
 
     verifyQueryResults(queryA, "coll/doc");
   }
@@ -454,7 +452,7 @@ public class IndexBackfillerTest {
     assertEquals(1, documentsProcessed);
 
     Target target = query("coll").filter(filter("foo", "==", 2)).toTarget();
-    Set<DocumentKey> matching = indexManager.getDocumentsMatchingTarget(target);
+    List<DocumentKey> matching = indexManager.getDocumentsMatchingTarget(target);
     assertTrue(matching.isEmpty());
   }
 
@@ -510,7 +508,7 @@ public class IndexBackfillerTest {
 
   private void verifyQueryResults(Query query, String... expectedKeys) {
     Target target = query.toTarget();
-    Set<DocumentKey> actualKeys = indexManager.getDocumentsMatchingTarget(target);
+    List<DocumentKey> actualKeys = indexManager.getDocumentsMatchingTarget(target);
     if (actualKeys == null) {
       assertEquals(0, expectedKeys.length);
     } else {

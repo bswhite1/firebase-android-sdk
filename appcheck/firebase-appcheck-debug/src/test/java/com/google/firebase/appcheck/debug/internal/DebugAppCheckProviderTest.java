@@ -33,8 +33,9 @@ import com.google.firebase.appcheck.internal.AppCheckTokenResponse;
 import com.google.firebase.appcheck.internal.DefaultAppCheckToken;
 import com.google.firebase.appcheck.internal.NetworkClient;
 import com.google.firebase.appcheck.internal.RetryManager;
+import com.google.firebase.concurrent.TestOnlyExecutors;
 import java.io.IOException;
-import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executor;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,14 +44,16 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.LooperMode;
 
 /** Tests for {@link DebugAppCheckProvider}. */
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@LooperMode(LooperMode.Mode.LEGACY)
 public class DebugAppCheckProviderTest {
 
   private static final String DEBUG_SECRET = "debugSecret";
-  private static final String ATTESTATION_TOKEN = "token";
+  private static final String APP_CHECK_TOKEN = "appCheckToken";
   private static final String TIME_TO_LIVE = "3600s";
   private static final String API_KEY = "apiKey";
   private static final String APP_ID = "appId";
@@ -70,7 +73,10 @@ public class DebugAppCheckProviderTest {
 
   private StorageHelper storageHelper;
   private SharedPreferences sharedPreferences;
-  private ExecutorService backgroundExecutor = MoreExecutors.newDirectExecutorService();
+  // TODO(b/258273630): Use TestOnlyExecutors instead of MoreExecutors.directExecutor().
+  private Executor liteExecutor = MoreExecutors.directExecutor();
+  private Executor backgroundExecutor = MoreExecutors.directExecutor();
+  private Executor blockingExecutor = MoreExecutors.directExecutor();
 
   @Before
   public void setup() {
@@ -98,7 +104,12 @@ public class DebugAppCheckProviderTest {
     assertThrows(
         NullPointerException.class,
         () -> {
-          new DebugAppCheckProvider(null, null);
+          new DebugAppCheckProvider(
+              null,
+              null,
+              TestOnlyExecutors.lite(),
+              TestOnlyExecutors.background(),
+              TestOnlyExecutors.blocking());
         });
   }
 
@@ -128,12 +139,12 @@ public class DebugAppCheckProviderTest {
     when(mockNetworkClient.exchangeAttestationForAppCheckToken(
             any(), eq(NetworkClient.DEBUG), eq(mockRetryManager)))
         .thenReturn(mockAppCheckTokenResponse);
-    when(mockAppCheckTokenResponse.getAttestationToken()).thenReturn(ATTESTATION_TOKEN);
+    when(mockAppCheckTokenResponse.getToken()).thenReturn(APP_CHECK_TOKEN);
     when(mockAppCheckTokenResponse.getTimeToLive()).thenReturn(TIME_TO_LIVE);
 
     DebugAppCheckProvider provider =
         new DebugAppCheckProvider(
-            DEBUG_SECRET, mockNetworkClient, backgroundExecutor, mockRetryManager);
+            DEBUG_SECRET, mockNetworkClient, liteExecutor, blockingExecutor, mockRetryManager);
     Task<AppCheckToken> task = provider.getToken();
 
     verify(mockNetworkClient)
@@ -141,7 +152,7 @@ public class DebugAppCheckProviderTest {
 
     AppCheckToken token = task.getResult();
     assertThat(token).isInstanceOf(DefaultAppCheckToken.class);
-    assertThat(token.getToken()).isEqualTo(ATTESTATION_TOKEN);
+    assertThat(token.getToken()).isEqualTo(APP_CHECK_TOKEN);
   }
 
   @Test
@@ -152,7 +163,7 @@ public class DebugAppCheckProviderTest {
 
     DebugAppCheckProvider provider =
         new DebugAppCheckProvider(
-            DEBUG_SECRET, mockNetworkClient, backgroundExecutor, mockRetryManager);
+            DEBUG_SECRET, mockNetworkClient, liteExecutor, blockingExecutor, mockRetryManager);
     Task<AppCheckToken> task = provider.getToken();
 
     verify(mockNetworkClient)

@@ -114,9 +114,6 @@ public final class LocalStore implements BundleCallback {
   /** Manages the list of active field and collection indices. */
   private IndexManager indexManager;
 
-  /** Manages field index backfill. */
-  private final @Nullable IndexBackfiller indexBackfiller;
-
   /** The set of all mutations that have been sent but not yet been applied to the backend. */
   private MutationQueue mutationQueue;
 
@@ -150,16 +147,11 @@ public final class LocalStore implements BundleCallback {
   /** Used to generate targetIds for queries tracked locally. */
   private final TargetIdGenerator targetIdGenerator;
 
-  public LocalStore(
-      Persistence persistence,
-      @Nullable IndexBackfiller indexBackfiller,
-      QueryEngine queryEngine,
-      User initialUser) {
+  public LocalStore(Persistence persistence, QueryEngine queryEngine, User initialUser) {
     hardAssert(
         persistence.isStarted(), "LocalStore was passed an unstarted persistence implementation");
     this.persistence = persistence;
     this.queryEngine = queryEngine;
-    this.indexBackfiller = indexBackfiller;
 
     targetCache = persistence.getTargetCache();
     bundleCache = persistence.getBundleCache();
@@ -178,16 +170,12 @@ public final class LocalStore implements BundleCallback {
     // TODO(indexing): Add spec tests that test these components change after a user change
     indexManager = persistence.getIndexManager(user);
     mutationQueue = persistence.getMutationQueue(user, indexManager);
-    documentOverlayCache = persistence.getDocumentOverlay(user);
+    documentOverlayCache = persistence.getDocumentOverlayCache(user);
     localDocuments =
         new LocalDocumentsView(remoteDocuments, mutationQueue, documentOverlayCache, indexManager);
 
     remoteDocuments.setIndexManager(indexManager);
     queryEngine.initialize(localDocuments, indexManager);
-    if (indexBackfiller != null) {
-      indexBackfiller.setIndexManager(indexManager);
-      indexBackfiller.setLocalDocumentsView(localDocuments);
-    }
   }
 
   public void start() {
@@ -202,6 +190,14 @@ public final class LocalStore implements BundleCallback {
 
   private void startMutationQueue() {
     persistence.runTransaction("Start MutationQueue", () -> mutationQueue.start());
+  }
+
+  public IndexManager getIndexManagerForCurrentUser() {
+    return indexManager;
+  }
+
+  public LocalDocumentsView getLocalDocumentsForCurrentUser() {
+    return localDocuments;
   }
 
   // PORTING NOTE: no shutdown for LocalStore or persistence components on Android.
@@ -244,9 +240,22 @@ public final class LocalStore implements BundleCallback {
     return persistence.runTransaction(
         "Locally write mutations",
         () -> {
+          // Figure out which keys do not have a remote version in the cache, this is needed to
+          // create the right overlay mutation: if no remote version presents, we do not need to
+          // create overlays as patch mutations.
+          // TODO(Overlay): Is there a better way to determine this? Document version does not work
+          // because local mutations set them back to 0.
+          Map<DocumentKey, MutableDocument> remoteDocs = remoteDocuments.getAll(keys);
+          Set<DocumentKey> docsWithoutRemoteVersion = new HashSet<>();
+          for (Map.Entry<DocumentKey, MutableDocument> entry : remoteDocs.entrySet()) {
+            if (!entry.getValue().isValidDocument()) {
+              docsWithoutRemoteVersion.add(entry.getKey());
+            }
+          }
           // Load and apply all existing mutations. This lets us compute the current base state for
           // all non-idempotent transforms before applying any additional user-provided writes.
-          ImmutableSortedMap<DocumentKey, Document> documents = localDocuments.getDocuments(keys);
+          Map<DocumentKey, OverlayedDocument> overlayedDocuments =
+              localDocuments.getOverlayedDocuments(remoteDocs);
 
           // For non-idempotent mutations (such as `FieldValue.increment()`), we record the base
           // state in a separate patch mutation. This is later used to guarantee consistent values
@@ -255,7 +264,8 @@ public final class LocalStore implements BundleCallback {
           List<Mutation> baseMutations = new ArrayList<>();
           for (Mutation mutation : mutations) {
             ObjectValue baseValue =
-                mutation.extractTransformBaseValue(documents.get(mutation.getKey()));
+                mutation.extractTransformBaseValue(
+                    overlayedDocuments.get(mutation.getKey()).getDocument());
             if (baseValue != null) {
               // NOTE: The base state should only be applied if there's some existing
               // document to override, so use a Precondition of exists=true
@@ -270,9 +280,11 @@ public final class LocalStore implements BundleCallback {
 
           MutationBatch batch =
               mutationQueue.addMutationBatch(localWriteTime, baseMutations, mutations);
-          Map<DocumentKey, Mutation> overlays = batch.applyToLocalDocumentSet(documents);
+          Map<DocumentKey, Mutation> overlays =
+              batch.applyToLocalDocumentSet(overlayedDocuments, docsWithoutRemoteVersion);
           documentOverlayCache.saveOverlays(batch.getBatchId(), overlays);
-          return new LocalDocumentsResult(batch.getBatchId(), documents);
+          return LocalDocumentsResult.fromOverlayedDocuments(
+              batch.getBatchId(), overlayedDocuments);
         });
   }
 

@@ -26,6 +26,7 @@ import static com.google.firebase.remoteconfig.RemoteConfigConstants.ResponseFie
 import static com.google.firebase.remoteconfig.RemoteConfigConstants.ResponseFieldKey.STATE;
 import static com.google.firebase.remoteconfig.internal.ConfigFetchHandler.BACKOFF_TIME_DURATIONS_IN_MINUTES;
 import static com.google.firebase.remoteconfig.internal.ConfigFetchHandler.DEFAULT_MINIMUM_FETCH_INTERVAL_IN_SECONDS;
+import static com.google.firebase.remoteconfig.internal.ConfigFetchHandler.FIRST_OPEN_TIME_KEY;
 import static com.google.firebase.remoteconfig.internal.ConfigFetchHandler.HTTP_TOO_MANY_REQUESTS;
 import static com.google.firebase.remoteconfig.internal.ConfigMetadataClient.LAST_FETCH_TIME_NO_FETCH_YET;
 import static com.google.firebase.remoteconfig.internal.ConfigMetadataClient.NO_BACKOFF_TIME;
@@ -42,6 +43,7 @@ import static java.util.concurrent.TimeUnit.HOURS;
 import static java.util.concurrent.TimeUnit.MINUTES;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -88,6 +90,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.LooperMode;
 import org.skyscreamer.jsonassert.JSONAssert;
 
 /**
@@ -97,6 +100,7 @@ import org.skyscreamer.jsonassert.JSONAssert;
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@LooperMode(LooperMode.Mode.LEGACY)
 public class ConfigFetchHandlerTest {
   private static final String INSTALLATION_ID = "'fL71_VyL3uo9jNMWu1L60S";
   private static final String INSTALLATION_AUTH_TOKEN =
@@ -195,6 +199,7 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ any(),
             /* lastFetchETag= */ any(),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ any(),
             /* currentTime= */ any());
   }
 
@@ -394,7 +399,7 @@ public class ConfigFetchHandlerTest {
 
   @Test
   public void fetch_fetchBackendCallFails_taskThrowsException() throws Exception {
-    when(mockBackendFetchApiClient.fetch(any(), any(), any(), any(), any(), any(), any()))
+    when(mockBackendFetchApiClient.fetch(any(), any(), any(), any(), any(), any(), any(), any()))
         .thenThrow(
             new FirebaseRemoteConfigClientException("Fetch failed due to an unexpected error."));
 
@@ -628,21 +633,45 @@ public class ConfigFetchHandlerTest {
   }
 
   @Test
-  public void fetch_hasAnalyticsSdk_sendsUserProperties() throws Exception {
+  public void fetch_hasAnalyticsSdk_sendsUserPropertiesAndFirstOpenTime() throws Exception {
+    // Provide the mock Analytics SDK.
+    AnalyticsConnector mockAnalyticsConnector = mock(AnalyticsConnector.class);
+    fetchHandler = getNewFetchHandler(mockAnalyticsConnector);
+    long firstOpenTime = 1636146000000L;
+
+    Map<String, String> customUserProperties =
+        ImmutableMap.of("up_key1", "up_val1", "up_key2", "up_val2");
+    Map<String, Object> allUserProperties =
+        ImmutableMap.of(
+            "up_key1", "up_val1", "up_key2", "up_val2", FIRST_OPEN_TIME_KEY, firstOpenTime);
+    when(mockAnalyticsConnector.getUserProperties(/*includeInternal=*/ false))
+        .thenReturn(ImmutableMap.copyOf(customUserProperties));
+    when(mockAnalyticsConnector.getUserProperties(/*includeInternal=*/ true))
+        .thenReturn(ImmutableMap.copyOf(allUserProperties));
+
+    fetchCallToHttpClientUpdatesClockAndReturnsConfig(firstFetchedContainer);
+
+    assertWithMessage("Fetch() failed!").that(fetchHandler.fetch().isSuccessful()).isTrue();
+
+    verifyBackendIsCalled(customUserProperties, firstOpenTime);
+  }
+
+  @Test
+  public void fetch_hasAnalyticsSdk_sendsUserPropertiesNoFirstOpenTime() throws Exception {
     // Provide the mock Analytics SDK.
     AnalyticsConnector mockAnalyticsConnector = mock(AnalyticsConnector.class);
     fetchHandler = getNewFetchHandler(mockAnalyticsConnector);
 
     Map<String, String> userProperties =
         ImmutableMap.of("up_key1", "up_val1", "up_key2", "up_val2");
-    when(mockAnalyticsConnector.getUserProperties(/*includeInternal=*/ false))
+    when(mockAnalyticsConnector.getUserProperties(anyBoolean()))
         .thenReturn(ImmutableMap.copyOf(userProperties));
 
     fetchCallToHttpClientUpdatesClockAndReturnsConfig(firstFetchedContainer);
 
     assertWithMessage("Fetch() failed!").that(fetchHandler.fetch().isSuccessful()).isTrue();
 
-    verifyBackendIsCalled(userProperties);
+    verifyBackendIsCalled(userProperties, null);
   }
 
   @Test
@@ -751,6 +780,7 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ any(),
             /* lastFetchETag= */ any(),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ any(),
             /* currentTime= */ any());
   }
 
@@ -762,6 +792,7 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ any(),
             /* lastFetchETag= */ any(),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ any(),
             /* currentTime= */ any()))
         .thenReturn(FetchResponse.forBackendHasNoUpdates(date));
   }
@@ -776,6 +807,7 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ any(),
             /* lastFetchETag= */ any(),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ any(),
             /* currentTime= */ any());
   }
 
@@ -855,10 +887,12 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ any(),
             /* lastFetchETag= */ any(),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ any(),
             /* currentTime= */ any());
   }
 
-  private void verifyBackendIsCalled(Map<String, String> userProperties) throws Exception {
+  private void verifyBackendIsCalled(Map<String, String> userProperties, Long firstOpenTime)
+      throws Exception {
     verify(mockBackendFetchApiClient)
         .fetch(
             any(HttpURLConnection.class),
@@ -867,6 +901,7 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ eq(userProperties),
             /* lastFetchETag= */ any(),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ eq(firstOpenTime),
             /* currentTime= */ any());
   }
 
@@ -879,6 +914,7 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ any(),
             /* lastFetchETag= */ any(),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ any(),
             /* currentTime= */ any());
   }
 
@@ -891,6 +927,7 @@ public class ConfigFetchHandlerTest {
             /* analyticsUserProperties= */ any(),
             /* lastFetchETag= */ eq(requestETag),
             /* customHeaders= */ any(),
+            /* firstOpenTime= */ any(),
             /* currentTime= */ any());
     assertThat(metadataClient.getLastFetchETag()).isEqualTo(responseETag);
   }
@@ -998,10 +1035,10 @@ public class ConfigFetchHandlerTest {
         ConfigContainer.newBuilder().withFetchTime(fetchTime);
 
     JSONObject entries = fetchResponse.getJSONObject(ENTRIES);
-    containerBuilder.replaceConfigsWith(entries);
+    containerBuilder = containerBuilder.replaceConfigsWith(entries);
 
     JSONArray experimentDescriptions = fetchResponse.getJSONArray(EXPERIMENT_DESCRIPTIONS);
-    containerBuilder.withAbtExperiments(experimentDescriptions);
+    containerBuilder = containerBuilder.withAbtExperiments(experimentDescriptions);
 
     return containerBuilder.build();
   }

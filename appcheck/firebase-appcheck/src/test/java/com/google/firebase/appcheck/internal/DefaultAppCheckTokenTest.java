@@ -37,6 +37,7 @@ public class DefaultAppCheckTokenTest {
   private static final String INVALID_TIME_TO_LIVE = "notanumber";
   private static final long EXPIRES_IN_ONE_HOUR = 60L * 60L * 1000L; // 1 hour in millis
   private static final long RECEIVED_AT_TIMESTAMP = 1L;
+  private static final long ONE_SECOND_MILLIS = 1000L;
   private static final long IAT = 10L;
   private static final long EXP = 30L;
   private static final String TOKEN_PREFIX = "prefix";
@@ -104,13 +105,14 @@ public class DefaultAppCheckTokenTest {
 
     assertThat(defaultAppCheckToken).isNotNull();
     assertThat(defaultAppCheckToken.getToken()).isEqualTo(rawToken);
-    assertThat(defaultAppCheckToken.getReceivedAtTimestamp()).isEqualTo(IAT);
-    assertThat(defaultAppCheckToken.getExpiresInMillis()).isEqualTo(EXP - IAT);
+    assertThat(defaultAppCheckToken.getReceivedAtTimestamp()).isEqualTo(IAT * ONE_SECOND_MILLIS);
+    assertThat(defaultAppCheckToken.getExpiresInMillis())
+        .isEqualTo((EXP - IAT) * ONE_SECOND_MILLIS);
   }
 
   @Test
   public void testConstructFromAppCheckTokenResponse_success() {
-    when(mockAppCheckTokenResponse.getAttestationToken()).thenReturn(TOKEN_PAYLOAD);
+    when(mockAppCheckTokenResponse.getToken()).thenReturn(TOKEN_PAYLOAD);
     when(mockAppCheckTokenResponse.getTimeToLive()).thenReturn(TIME_TO_LIVE_ONE_HOUR);
 
     DefaultAppCheckToken defaultAppCheckToken =
@@ -122,7 +124,7 @@ public class DefaultAppCheckTokenTest {
 
   @Test
   public void testConstructFromAppCheckTokenResponse_withNanoSecondsDuration_success() {
-    when(mockAppCheckTokenResponse.getAttestationToken()).thenReturn(TOKEN_PAYLOAD);
+    when(mockAppCheckTokenResponse.getToken()).thenReturn(TOKEN_PAYLOAD);
     when(mockAppCheckTokenResponse.getTimeToLive()).thenReturn(TIME_TO_LIVE_ONE_HOUR_PLUS_NANOS);
 
     DefaultAppCheckToken defaultAppCheckToken =
@@ -136,14 +138,15 @@ public class DefaultAppCheckTokenTest {
   public void testConstructFromAppCheckTokenResponse_invalidTimeToLiveFormat_fallbackToTokenClaims()
       throws Exception {
     String rawToken = constructFakeRawToken();
-    when(mockAppCheckTokenResponse.getAttestationToken()).thenReturn(rawToken);
+    when(mockAppCheckTokenResponse.getToken()).thenReturn(rawToken);
     when(mockAppCheckTokenResponse.getTimeToLive()).thenReturn(INVALID_TIME_TO_LIVE);
 
     DefaultAppCheckToken defaultAppCheckToken =
         DefaultAppCheckToken.constructFromAppCheckTokenResponse(mockAppCheckTokenResponse);
 
     assertThat(defaultAppCheckToken.getToken()).isEqualTo(rawToken);
-    assertThat(defaultAppCheckToken.getExpiresInMillis()).isEqualTo(EXP - IAT);
+    assertThat(defaultAppCheckToken.getExpiresInMillis())
+        .isEqualTo((EXP - IAT) * ONE_SECOND_MILLIS);
   }
 
   private String constructFakeRawToken() throws Exception {

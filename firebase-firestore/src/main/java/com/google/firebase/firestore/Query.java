@@ -14,6 +14,7 @@
 
 package com.google.firebase.firestore;
 
+import static com.google.firebase.firestore.core.Query.LimitType.LIMIT_TO_LAST;
 import static com.google.firebase.firestore.util.Assert.fail;
 import static com.google.firebase.firestore.util.Assert.hardAssert;
 import static com.google.firebase.firestore.util.Preconditions.checkNotNull;
@@ -387,6 +388,23 @@ public class Query {
     return where(Filter.notInArray(fieldPath, values));
   }
 
+  // TODO(orquery): This method will become public API. Change visibility and add documentation.
+  /**
+   * Creates and returns a new {@code Query} with the additional filter.
+   *
+   * @param filter The new filter to apply to the existing query.
+   * @return The newly created {@code Query}.
+   */
+  Query where(Filter filter) {
+    com.google.firebase.firestore.core.Filter parsedFilter = parseFilter(filter);
+    if (parsedFilter.getFilters().isEmpty()) {
+      // Return the existing query if not adding any more filters (e.g. an empty composite filter).
+      return this;
+    }
+    validateNewFilter(parsedFilter);
+    return new Query(query.filter(parsedFilter), firestore);
+  }
+
   /**
    * Takes a {@link Filter.UnaryFilter} object, parses the value object and returns a new {@link
    * FieldFilter} for the field, operator, and parsed value.
@@ -465,17 +483,6 @@ public class Query {
       return parseFieldFilter((Filter.UnaryFilter) filter);
     }
     return parseCompositeFilter((Filter.CompositeFilter) filter);
-  }
-
-  // TODO(orquery): This method will become public API. Change visibility and add documentation.
-  private Query where(Filter filter) {
-    com.google.firebase.firestore.core.Filter parsedFilter = parseFilter(filter);
-    if (parsedFilter.getFilters().isEmpty()) {
-      // Return the existing query if not adding any more filters (e.g. an empty composite filter).
-      return this;
-    }
-    validateNewFilter(parsedFilter);
-    return new Query(query.filter(parsedFilter), firestore);
   }
 
   private void validateOrderByField(com.google.firebase.firestore.model.FieldPath field) {
@@ -617,7 +624,7 @@ public class Query {
         validateOrderByFieldMatchesInequality(firstOrderByField, newInequality);
       }
     }
-    Operator conflictingOp = findFilterWithOperator(query.getFilters(), conflictingOps(filterOp));
+    Operator conflictingOp = findOpInsideFilters(query.getFilters(), conflictingOps(filterOp));
     if (conflictingOp != null) {
       // We special case when it's a duplicate op to give a slightly clearer error message.
       if (conflictingOp == filterOp) {
@@ -639,7 +646,7 @@ public class Query {
     com.google.firebase.firestore.core.Query testQuery = query;
     for (FieldFilter subfilter : filter.getFlattenedFilters()) {
       validateNewFieldFilter(testQuery, subfilter);
-      testQuery = query.filter(subfilter);
+      testQuery = testQuery.filter(subfilter);
     }
   }
 
@@ -648,13 +655,12 @@ public class Query {
    * returns the first one that is, or null if none are.
    */
   @Nullable
-  private Operator findFilterWithOperator(
+  private Operator findOpInsideFilters(
       List<com.google.firebase.firestore.core.Filter> filters, List<Operator> operators) {
     for (com.google.firebase.firestore.core.Filter filter : filters) {
-      if (filter instanceof FieldFilter) {
-        Operator filterOp = ((FieldFilter) filter).getOperator();
-        if (operators.contains(filterOp)) {
-          return filterOp;
+      for (FieldFilter fieldFilter : filter.getFlattenedFilters()) {
+        if (operators.contains(fieldFilter.getOperator())) {
+          return fieldFilter.getOperator();
         }
       }
     }
@@ -1217,10 +1223,27 @@ public class Query {
   }
 
   private void validateHasExplicitOrderByForLimitToLast() {
-    if (query.hasLimitToLast() && query.getExplicitOrderBy().isEmpty()) {
+    if (query.getLimitType().equals(LIMIT_TO_LAST) && query.getExplicitOrderBy().isEmpty()) {
       throw new IllegalStateException(
           "limitToLast() queries require specifying at least one orderBy() clause");
     }
+  }
+
+  /**
+   * Returns a query that counts the documents in the result set of this query.
+   *
+   * <p>The returned query, when executed, counts the documents in the result set of this query
+   * <em>without actually downloading the documents</em>.
+   *
+   * <p>Using the returned query to count the documents is efficient because only the final count,
+   * not the documents' data, is downloaded. The returned query can even count the documents if the
+   * result set would be prohibitively large to download entirely (e.g. thousands of documents).
+   *
+   * @return a query that counts the documents in the result set of this query.
+   */
+  @NonNull
+  public AggregateQuery count() {
+    return new AggregateQuery(this);
   }
 
   @Override

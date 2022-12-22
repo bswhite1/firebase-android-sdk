@@ -17,6 +17,7 @@ package com.google.firebase.firestore;
 import static com.google.firebase.firestore.util.Assert.hardAssert;
 import static com.google.firebase.firestore.util.Preconditions.checkNotNull;
 
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.Context;
 import androidx.annotation.Keep;
@@ -27,6 +28,7 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.annotations.PreviewApi;
 import com.google.firebase.appcheck.interop.InternalAppCheckTokenProvider;
 import com.google.firebase.auth.internal.InternalAuthProvider;
 import com.google.firebase.emulators.EmulatedServiceSettings;
@@ -304,8 +306,9 @@ public class FirebaseFirestore {
    * @return A task that resolves once all indices are successfully configured.
    * @throws IllegalArgumentException if the JSON format is invalid
    */
-  @VisibleForTesting
-  Task<Void> setIndexConfiguration(String json) {
+  @PreviewApi
+  @NonNull
+  public Task<Void> setIndexConfiguration(@NonNull String json) {
     ensureClientConfigured();
     Preconditions.checkState(
         settings.isPersistenceEnabled(), "Cannot enable indexes when persistence is disabled");
@@ -403,9 +406,10 @@ public class FirebaseFirestore {
   }
 
   /**
-   * Executes the given updateFunction and then attempts to commit the changes applied within the
-   * transaction. If any document read within the transaction has changed, the updateFunction will
-   * be retried. If it fails to commit after 5 attempts, the transaction will fail.
+   * Executes the given {@code updateFunction} and then attempts to commit the changes applied
+   * within the transaction. If any document read within the transaction has changed, the
+   * updateFunction will be retried. If it fails to commit after 5 attempts (the default failure
+   * limit), the transaction will fail.
    *
    * <p>The maximum number of writes allowed in a single transaction is 500, but note that each
    * usage of {@link FieldValue#serverTimestamp()}, {@link FieldValue#arrayUnion(Object...)}, {@link
@@ -417,7 +421,7 @@ public class FirebaseFirestore {
    * @return The task returned from the updateFunction.
    */
   private <ResultT> Task<ResultT> runTransaction(
-      Transaction.Function<ResultT> updateFunction, Executor executor) {
+      TransactionOptions options, Transaction.Function<ResultT> updateFunction, Executor executor) {
     ensureClientConfigured();
 
     Logger.debug("Ben_FirebaseFirestore", "Entered runTransaction 1");
@@ -436,13 +440,16 @@ public class FirebaseFirestore {
 
     Logger.debug("Ben_FirebaseFirestore", "runTransaction calling client.transaction");
 
-    return client.transaction(wrappedUpdateFunction);
+    return client.transaction(options, wrappedUpdateFunction);
+
   }
 
   /**
-   * Executes the given updateFunction and then attempts to commit the changes applied within the
-   * transaction. If any document read within the transaction has changed, the updateFunction will
-   * be retried. If it fails to commit after 5 attempts, the transaction will fail.
+   * Executes the given {@code updateFunction} and then attempts to commit the changes applied
+   * within the transaction. If any document read within the transaction has changed, the
+   * updateFunction will be retried. If it fails to commit after 5 attempts (the default failure
+   * limit), the transaction will fail. To have a different number of retries, use the {@link
+   * FirebaseFirestore#runTransaction(TransactionOptions, Transaction.Function)} method instead.
    *
    * @param updateFunction The function to execute within the transaction context.
    * @return The task returned from the updateFunction.
@@ -450,12 +457,30 @@ public class FirebaseFirestore {
   @NonNull
   public <TResult> Task<TResult> runTransaction(
       @NonNull Transaction.Function<TResult> updateFunction) {
+    return runTransaction(TransactionOptions.DEFAULT, updateFunction);
+  }
+
+  /**
+   * Executes the given {@code updateFunction} and then attempts to commit the changes applied
+   * within the transaction. If any document read within the transaction has changed, the
+   * updateFunction will be retried. If it fails to commit after the maxmimum number of attempts
+   * specified in transactionOptions, the transaction will fail.
+   *
+   * @param options The transaction options for controlling execution.
+   * @param updateFunction The function to execute within the transaction context.
+   * @return The task returned from the updateFunction.
+   */
+  @NonNull
+  public <TResult> Task<TResult> runTransaction(
+      @NonNull TransactionOptions options, @NonNull Transaction.Function<TResult> updateFunction) {
     checkNotNull(updateFunction, "Provided transaction update function must not be null.");
 
     Logger.debug("Ben_FirebaseFirestore", "Entered runTransaction 2");
 
     return runTransaction(
-        updateFunction, com.google.firebase.firestore.core.Transaction.getDefaultExecutor());
+        options,
+        updateFunction,
+        com.google.firebase.firestore.core.Transaction.getDefaultExecutor());
   }
 
   /**
@@ -534,6 +559,7 @@ public class FirebaseFirestore {
    */
   @NonNull
   public Task<Void> waitForPendingWrites() {
+    ensureClientConfigured();
     return client.waitForPendingWrites();
   }
 
@@ -720,6 +746,8 @@ public class FirebaseFirestore {
    * documents) and loaded to local cache using {@link #loadBundle(byte[])}. Once in local cache,
    * you can use this method to extract a query by name.
    */
+  // TODO(b/261013682): Use an explicit executor in continuations.
+  @SuppressLint("TaskMainThread")
   public @NonNull Task<Query> getNamedQuery(@NonNull String name) {
     ensureClientConfigured();
     return client

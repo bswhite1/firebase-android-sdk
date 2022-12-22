@@ -16,7 +16,7 @@ package com.google.firebase.crashlytics.internal.common;
 
 import static java.util.Objects.requireNonNull;
 
-import android.os.Looper;
+import android.annotation.SuppressLint;
 import androidx.annotation.NonNull;
 import com.google.android.gms.tasks.Continuation;
 import com.google.android.gms.tasks.Task;
@@ -35,6 +35,8 @@ public final class Utils {
   private Utils() {}
 
   /** @return A tasks that is resolved when either of the given tasks is resolved. */
+  // TODO(b/261014167): Use an explicit executor in continuations.
+  @SuppressLint("TaskMainThread")
   public static <T> Task<T> race(Task<T> t1, Task<T> t2) {
     final TaskCompletionSource<T> result = new TaskCompletionSource<>();
     Continuation<T, Void> continuation =
@@ -73,6 +75,8 @@ public final class Utils {
     final TaskCompletionSource<T> tcs = new TaskCompletionSource<T>();
     executor.execute(
         new Runnable() {
+          // TODO(b/261014167): Use an explicit executor in continuations.
+          @SuppressLint("TaskMainThread")
           @Override
           public void run() {
             try {
@@ -122,11 +126,7 @@ public final class Utils {
           return null;
         });
 
-    if (Looper.getMainLooper() == Looper.myLooper()) {
-      latch.await(CrashlyticsCore.DEFAULT_MAIN_HANDLER_TIMEOUT_SEC, TimeUnit.SECONDS);
-    } else {
-      latch.await();
-    }
+    latch.await(CrashlyticsCore.DEFAULT_MAIN_HANDLER_TIMEOUT_SEC, TimeUnit.SECONDS);
 
     if (task.isSuccessful()) {
       return task.getResult();
@@ -136,6 +136,29 @@ public final class Utils {
       throw new IllegalStateException(task.getException());
     } else {
       throw new TimeoutException();
+    }
+  }
+
+  /** Invokes latch.await(timeout, unit) uninterruptibly. */
+  public static boolean awaitUninterruptibly(CountDownLatch latch, long timeout, TimeUnit unit) {
+    boolean interrupted = false;
+    try {
+      long remainingNanos = unit.toNanos(timeout);
+      long end = System.nanoTime() + remainingNanos;
+
+      while (true) {
+        try {
+          // CountDownLatch treats negative timeouts just like zero.
+          return latch.await(remainingNanos, TimeUnit.NANOSECONDS);
+        } catch (InterruptedException e) {
+          interrupted = true;
+          remainingNanos = end - System.nanoTime();
+        }
+      }
+    } finally {
+      if (interrupted) {
+        Thread.currentThread().interrupt();
+      }
     }
   }
 

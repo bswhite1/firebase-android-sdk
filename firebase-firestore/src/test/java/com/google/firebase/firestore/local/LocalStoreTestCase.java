@@ -24,6 +24,7 @@ import static com.google.firebase.firestore.testutil.TestUtil.docMap;
 import static com.google.firebase.firestore.testutil.TestUtil.existenceFilterEvent;
 import static com.google.firebase.firestore.testutil.TestUtil.filter;
 import static com.google.firebase.firestore.testutil.TestUtil.key;
+import static com.google.firebase.firestore.testutil.TestUtil.keyMap;
 import static com.google.firebase.firestore.testutil.TestUtil.keySet;
 import static com.google.firebase.firestore.testutil.TestUtil.keys;
 import static com.google.firebase.firestore.testutil.TestUtil.map;
@@ -82,6 +83,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -125,10 +127,9 @@ public abstract class LocalStoreTestCase {
 
     localStorePersistence = getPersistence();
     queryEngine = new CountingQueryEngine(new QueryEngine());
-    indexBackfiller = new IndexBackfiller(localStorePersistence, new AsyncQueue());
-    localStore =
-        new LocalStore(localStorePersistence, indexBackfiller, queryEngine, User.UNAUTHENTICATED);
+    localStore = new LocalStore(localStorePersistence, queryEngine, User.UNAUTHENTICATED);
     localStore.start();
+    indexBackfiller = new IndexBackfiller(localStorePersistence, new AsyncQueue(), localStore);
   }
 
   @After
@@ -331,6 +332,11 @@ public abstract class LocalStoreTestCase {
     assertEquals("Overlays read (by key)", byKey, queryEngine.getOverlaysReadByKey());
     assertEquals(
         "Overlays read (by collection)", byCollection, queryEngine.getOverlaysReadByCollection());
+  }
+
+  /** Asserts the expected overlay types. */
+  protected void assertOverlayTypes(Map<DocumentKey, CountingQueryEngine.OverlayType> expected) {
+    assertEquals("Overlays types", expected, queryEngine.getOverlayTypes());
   }
 
   /**
@@ -759,7 +765,7 @@ public abstract class LocalStoreTestCase {
 
     acknowledgeMutation(2); // delete mutation
     assertRemoved("foo/bar");
-    assertContains(deletedDoc("foo/bar", 2).setHasCommittedMutations());
+    assertContains(deletedDoc("foo/bar", 0).setHasLocalMutations());
 
     acknowledgeMutation(3); // patch mutation
     assertChanged(unknownDoc("foo/bar", 3));
@@ -976,6 +982,7 @@ public abstract class LocalStoreTestCase {
     localStore.executeQuery(query, /* usePreviousResults= */ true);
     assertRemoteDocumentsRead(/* byKey= */ 0, /* byCollection= */ 2);
     assertOverlaysRead(/* byKey= */ 0, /* byCollection= */ 1);
+    assertOverlayTypes(keyMap("foo/bonk", CountingQueryEngine.OverlayType.Set));
   }
 
   @Test
@@ -1337,16 +1344,17 @@ public abstract class LocalStoreTestCase {
             emptyList()));
     assertChanged(doc("foo/bar", 1, map("sum", 0, "array_union", new ArrayList<>())));
 
-    writeMutations(
-        asList(
-            patchMutation("foo/bar", map("sum", FieldValue.increment(1))),
-            patchMutation("foo/bar", map("array_union", FieldValue.arrayUnion("foo")))));
+    writeMutation(patchMutation("foo/bar", map("sum", FieldValue.increment(1))));
+    assertChanged(
+        doc("foo/bar", 1, map("sum", 1, "array_union", new ArrayList<>())).setHasLocalMutations());
+
+    writeMutation(patchMutation("foo/bar", map("array_union", FieldValue.arrayUnion("foo"))));
     assertChanged(
         doc("foo/bar", 1, map("sum", 1, "array_union", Collections.singletonList("foo")))
             .setHasLocalMutations());
 
-    // The sum transform is not idempotent and the backend's updated value is ignored. The
-    // ArrayUnion transform is recomputed and includes the backend value.
+    // The sum transform and array union transform make the SDK ignore the
+    // backend's updated value.
     applyRemoteEvent(
         addedRemoteEvent(
             doc("foo/bar", 2, map("sum", 1337, "array_union", Collections.singletonList("bar"))),
@@ -1355,10 +1363,18 @@ public abstract class LocalStoreTestCase {
     assertChanged(
         doc("foo/bar", 2, map("sum", 1, "array_union", asList("foo"))).setHasLocalMutations());
 
-    acknowledgeMutationWithTransformResults(3, 1338, asList("bar", "foo"));
+    // With a field transform acknowledgement, the overlay is recalculated with
+    // remaining local mutations.
+    acknowledgeMutationWithTransformResults(3, 1338);
     assertChanged(
         doc("foo/bar", 3, map("sum", 1338, "array_union", asList("bar", "foo")))
             .setReadTime(new SnapshotVersion(new Timestamp(0, 3000)))
+            .setHasLocalMutations());
+
+    acknowledgeMutationWithTransformResults(4, asList("bar", "foo"));
+    assertChanged(
+        doc("foo/bar", 4, map("sum", 1338, "array_union", asList("bar", "foo")))
+            .setReadTime(new SnapshotVersion(new Timestamp(0, 4000)))
             .setHasCommittedMutations());
   }
 
@@ -1598,5 +1614,104 @@ public abstract class LocalStoreTestCase {
     // The update for foo/bar is ignored.
     assertContains(doc("foo/bar", 1, map("val", "old")));
     assertContains(doc("foo/baz", 2, map("val", "new")));
+  }
+
+  @Test
+  public void testCanHandleBatchAckWhenPendingBatchesHaveOtherDocs() {
+    // Prepare two batches, the first one will get rejected by the backend.
+    // When the first batch is rejected, overlay is recalculated with only the
+    // second batch, even though it has more documents than what is being rejected.
+    // See: https://github.com/firebase/firebase-android-sdk/issues/3490
+    writeMutation(patchMutation("foo/bar", map("foo", "bar")));
+    writeMutations(
+        asList(
+            setMutation("foo/bar", map("foo", "bar-set")),
+            setMutation("foo/another", map("foo", "another"))));
+
+    rejectMutation();
+    assertContains(doc("foo/bar", 0, map("foo", "bar-set")).setHasLocalMutations());
+    assertContains(doc("foo/another", 0, map("foo", "another")).setHasLocalMutations());
+  }
+
+  @Test
+  public void testMultipleFieldPatchesOnRemoteDocs() {
+    Query query = query("foo");
+    allocateQuery(query);
+    assertTargetId(2);
+
+    applyRemoteEvent(
+        addedRemoteEvent(doc("foo/bar", 1, map("likes", 0, "stars", 0)), asList(2), emptyList()));
+    assertChanged(doc("foo/bar", 1, map("likes", 0, "stars", 0)));
+    assertContains(doc("foo/bar", 1, map("likes", 0, "stars", 0)));
+
+    writeMutation(patchMutation("foo/bar", map("likes", 1)));
+    assertChanged(doc("foo/bar", 1, map("likes", 1, "stars", 0)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 1, map("likes", 1, "stars", 0)).setHasLocalMutations());
+
+    writeMutation(patchMutation("foo/bar", map("stars", 1)));
+    assertChanged(doc("foo/bar", 1, map("likes", 1, "stars", 1)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 1, map("likes", 1, "stars", 1)).setHasLocalMutations());
+
+    writeMutation(patchMutation("foo/bar", map("stars", 2)));
+    assertChanged(doc("foo/bar", 1, map("likes", 1, "stars", 2)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 1, map("likes", 1, "stars", 2)).setHasLocalMutations());
+  }
+
+  @Test
+  public void testMultipleFieldPatchesInOneBatchOnRemoteDocs() {
+    Query query = query("foo");
+    allocateQuery(query);
+    assertTargetId(2);
+
+    applyRemoteEvent(
+        addedRemoteEvent(doc("foo/bar", 1, map("likes", 0, "stars", 0)), asList(2), emptyList()));
+    assertChanged(doc("foo/bar", 1, map("likes", 0, "stars", 0)));
+    assertContains(doc("foo/bar", 1, map("likes", 0, "stars", 0)));
+
+    writeMutations(
+        Lists.newArrayList(
+            patchMutation("foo/bar", map("likes", 1)), patchMutation("foo/bar", map("stars", 1))));
+    assertChanged(doc("foo/bar", 1, map("likes", 1, "stars", 1)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 1, map("likes", 1, "stars", 1)).setHasLocalMutations());
+
+    writeMutation(patchMutation("foo/bar", map("stars", 2)));
+    assertChanged(doc("foo/bar", 1, map("likes", 1, "stars", 2)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 1, map("likes", 1, "stars", 2)).setHasLocalMutations());
+  }
+
+  @Test
+  public void testMultipleFieldPatchesOnLocalDocs() {
+    writeMutation(setMutation("foo/bar", map("likes", 0, "stars", 0)));
+    assertChanged(doc("foo/bar", 0, map("likes", 0, "stars", 0)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 0, map("likes", 0, "stars", 0)).setHasLocalMutations());
+
+    writeMutation(patchMutation("foo/bar", map("likes", 1)));
+    assertChanged(doc("foo/bar", 0, map("likes", 1, "stars", 0)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 0, map("likes", 1, "stars", 0)).setHasLocalMutations());
+
+    writeMutation(patchMutation("foo/bar", map("stars", 1)));
+    assertChanged(doc("foo/bar", 0, map("likes", 1, "stars", 1)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 0, map("likes", 1, "stars", 1)).setHasLocalMutations());
+
+    writeMutation(patchMutation("foo/bar", map("stars", 2)));
+    assertChanged(doc("foo/bar", 0, map("likes", 1, "stars", 2)).setHasLocalMutations());
+    assertContains(doc("foo/bar", 0, map("likes", 1, "stars", 2)).setHasLocalMutations());
+  }
+
+  @Test
+  public void testUpdateOnRemoteDocLeadsToUpdateOverlay() {
+    Query query = query("foo");
+    allocateQuery(query);
+
+    applyRemoteEvent(updateRemoteEvent(doc("foo/baz", 10, map("a", 1)), asList(2), emptyList()));
+    applyRemoteEvent(updateRemoteEvent(doc("foo/bar", 20, map()), asList(2), emptyList()));
+    writeMutation(patchMutation("foo/baz", map("b", 2)));
+
+    resetPersistenceStats();
+
+    localStore.executeQuery(query, /* usePreviousResults= */ true);
+    assertRemoteDocumentsRead(/* byKey= */ 0, /* byCollection= */ 2);
+    assertOverlaysRead(/* byKey= */ 0, /* byCollection= */ 1);
+    assertOverlayTypes(keyMap("foo/baz", CountingQueryEngine.OverlayType.Patch));
   }
 }

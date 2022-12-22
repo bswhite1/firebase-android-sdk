@@ -275,7 +275,6 @@ public class PersistentConnectionImpl implements Connection.Delegate, Persistent
   private static final long SUCCESSFUL_CONNECTION_ESTABLISHED_DELAY = 30 * 1000;
 
   private static final long IDLE_TIMEOUT = 60 * 1000;
-  private static final long GET_CONNECT_TIMEOUT = 3 * 1000;
 
   /**
    * If auth or appcheck fails repeatedly, we'll assume something is wrong and log a warning / back
@@ -420,29 +419,12 @@ public class PersistentConnectionImpl implements Connection.Delegate, Persistent
               String status = (String) response.get(REQUEST_STATUS);
               if (status.equals("ok")) {
                 Object body = response.get(SERVER_DATA_UPDATE_BODY);
-                delegate.onDataUpdate(query.path, body, /*isMerge=*/ false, /*tagNumber=*/ null);
                 source.setResult(body);
               } else {
                 source.setException(new Exception((String) response.get(SERVER_DATA_UPDATE_BODY)));
               }
             });
     outstandingGets.put(readId, outstandingGet);
-
-    if (!connected()) {
-      executorService.schedule(
-          () -> {
-            if (!outstandingGet.markSent()) {
-              return;
-            }
-            if (logger.logsDebug()) {
-              logger.debug("get " + readId + " timed out waiting for connection");
-            }
-            outstandingGets.remove(readId);
-            source.setException(new Exception("Client is offline"));
-          },
-          GET_CONNECT_TIMEOUT,
-          TimeUnit.MILLISECONDS);
-    }
 
     if (canSendReads()) {
       sendGet(readId);

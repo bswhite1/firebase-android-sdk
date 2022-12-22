@@ -21,6 +21,7 @@ import android.content.Intent;
 import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
+import androidx.annotation.GuardedBy;
 import com.google.android.gms.common.annotation.KeepForSdk;
 import com.google.android.gms.common.util.PlatformVersion;
 import com.google.android.gms.common.util.VisibleForTesting;
@@ -28,7 +29,6 @@ import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
-import javax.annotation.concurrent.GuardedBy;
 
 /**
  * Processes incoming FCM broadcasts.
@@ -118,11 +118,16 @@ public class FcmBroadcastProcessor {
     if (Log.isLoggable(TAG, Log.DEBUG)) {
       Log.d(TAG, "Binding to service");
     }
+    if (ServiceStarter.getInstance().hasWakeLockPermission(context)) {
+      WakeLockHolder.sendWakefulServiceIntent(
+          context, getServiceConnection(context, ServiceStarter.ACTION_MESSAGING_EVENT), intent);
+    } else {
+      // Ignore result since we're no longer blocking on the service handling the intent.
+      Task<Void> unused =
+          getServiceConnection(context, ServiceStarter.ACTION_MESSAGING_EVENT).sendIntent(intent);
+    }
 
-    return getServiceConnection(context, ServiceStarter.ACTION_MESSAGING_EVENT)
-        .sendIntent(intent)
-        // ok to use direct executor because we're just immediately returning an int
-        .continueWith(Runnable::run, t -> ServiceStarter.SUCCESS);
+    return Tasks.forResult(ServiceStarter.SUCCESS);
   }
 
   /** Connect to a service via bind. This is used to process intents in Android O+ */

@@ -14,10 +14,9 @@
 
 package com.google.firebase.firestore.local;
 
-import static com.google.firebase.firestore.util.Assert.hardAssert;
-
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
+import com.google.common.base.Supplier;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.FieldIndex.IndexOffset;
@@ -41,25 +40,30 @@ public class IndexBackfiller {
 
   private final Scheduler scheduler;
   private final Persistence persistence;
-  private LocalDocumentsView localDocumentsView;
-  private IndexManager indexManager;
+  private final Supplier<IndexManager> indexManagerOfCurrentUser;
+  private final Supplier<LocalDocumentsView> localDocumentsViewOfCurrentUser;
   private int maxDocumentsToProcess = MAX_DOCUMENTS_TO_PROCESS;
 
-  public IndexBackfiller(Persistence persistence, AsyncQueue asyncQueue) {
+  public IndexBackfiller(Persistence persistence, AsyncQueue asyncQueue, LocalStore localStore) {
+    this(
+        persistence,
+        asyncQueue,
+        localStore::getIndexManagerForCurrentUser,
+        localStore::getLocalDocumentsForCurrentUser);
+  }
+
+  public IndexBackfiller(
+      Persistence persistence,
+      AsyncQueue asyncQueue,
+      Supplier<IndexManager> indexManagerOfCurrentUser,
+      Supplier<LocalDocumentsView> localDocumentsViewOfCurrentUser) {
     this.persistence = persistence;
     this.scheduler = new Scheduler(asyncQueue);
-  }
-
-  public void setLocalDocumentsView(LocalDocumentsView localDocumentsView) {
-    this.localDocumentsView = localDocumentsView;
-  }
-
-  public void setIndexManager(IndexManager indexManager) {
-    this.indexManager = indexManager;
+    this.indexManagerOfCurrentUser = indexManagerOfCurrentUser;
+    this.localDocumentsViewOfCurrentUser = localDocumentsViewOfCurrentUser;
   }
 
   public class Scheduler implements com.google.firebase.firestore.local.Scheduler {
-    private boolean hasRun = false;
     @Nullable private AsyncQueue.DelayedTask backfillTask;
     private final AsyncQueue asyncQueue;
 
@@ -69,7 +73,7 @@ public class IndexBackfiller {
 
     @Override
     public void start() {
-      scheduleBackfill();
+      scheduleBackfill(INITIAL_BACKFILL_DELAY_MS);
     }
 
     @Override
@@ -79,8 +83,7 @@ public class IndexBackfiller {
       }
     }
 
-    private void scheduleBackfill() {
-      long delay = hasRun ? REGULAR_BACKFILL_DELAY_MS : INITIAL_BACKFILL_DELAY_MS;
+    private void scheduleBackfill(long delay) {
       backfillTask =
           asyncQueue.enqueueAfterDelay(
               AsyncQueue.TimerId.INDEX_BACKFILL,
@@ -88,8 +91,7 @@ public class IndexBackfiller {
               () -> {
                 int documentsProcessed = backfill();
                 Logger.debug(LOG_TAG, "Documents written: %s", documentsProcessed);
-                hasRun = true;
-                scheduleBackfill();
+                scheduleBackfill(REGULAR_BACKFILL_DELAY_MS);
               });
     }
   }
@@ -100,13 +102,12 @@ public class IndexBackfiller {
 
   /** Runs a single backfill operation and returns the number of documents processed. */
   public int backfill() {
-    hardAssert(localDocumentsView != null, "setLocalDocumentsView() not called");
-    hardAssert(indexManager != null, "setIndexManager() not called");
     return persistence.runTransaction("Backfill Indexes", () -> this.writeIndexEntries());
   }
 
   /** Writes index entries until the cap is reached. Returns the number of documents processed. */
   private int writeIndexEntries() {
+    IndexManager indexManager = indexManagerOfCurrentUser.get();
     Set<String> processedCollectionGroups = new HashSet<>();
     int documentsRemaining = maxDocumentsToProcess;
     while (documentsRemaining > 0) {
@@ -126,6 +127,8 @@ public class IndexBackfiller {
    */
   private int writeEntriesForCollectionGroup(
       String collectionGroup, int documentsRemainingUnderCap) {
+    IndexManager indexManager = indexManagerOfCurrentUser.get();
+    LocalDocumentsView localDocumentsView = localDocumentsViewOfCurrentUser.get();
     // Use the earliest offset of all field indexes to query the local cache.
     IndexOffset existingOffset = indexManager.getMinOffset(collectionGroup);
 

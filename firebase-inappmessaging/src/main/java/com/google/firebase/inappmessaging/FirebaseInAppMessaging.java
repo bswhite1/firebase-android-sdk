@@ -18,6 +18,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.android.gms.common.util.VisibleForTesting;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.annotations.concurrent.Lightweight;
 import com.google.firebase.inappmessaging.internal.DataCollectionHelper;
 import com.google.firebase.inappmessaging.internal.DeveloperListenerManager;
 import com.google.firebase.inappmessaging.internal.DisplayCallbacksFactory;
@@ -60,6 +61,7 @@ public class FirebaseInAppMessaging {
 
   private boolean areMessagesSuppressed;
   private FirebaseInAppMessagingDisplay fiamDisplay;
+  @Lightweight private Executor lightWeightExecutor;
 
   @VisibleForTesting
   @Inject
@@ -69,7 +71,8 @@ public class FirebaseInAppMessaging {
       DataCollectionHelper dataCollectionHelper,
       FirebaseInstallationsApi firebaseInstallations,
       DisplayCallbacksFactory displayCallbacksFactory,
-      DeveloperListenerManager developerListenerManager) {
+      DeveloperListenerManager developerListenerManager,
+      @Lightweight Executor lightWeightExecutor) {
     this.inAppMessageStreamManager = inAppMessageStreamManager;
     this.programaticContextualTriggers = programaticContextualTriggers;
     this.dataCollectionHelper = dataCollectionHelper;
@@ -77,11 +80,15 @@ public class FirebaseInAppMessaging {
     this.areMessagesSuppressed = false;
     this.displayCallbacksFactory = displayCallbacksFactory;
     this.developerListenerManager = developerListenerManager;
+    this.lightWeightExecutor = lightWeightExecutor;
 
     firebaseInstallations
         .getId()
         .addOnSuccessListener(
-            id -> Logging.logi("Starting InAppMessaging runtime with Installation ID " + id));
+            lightWeightExecutor,
+            id -> {
+              Logging.logi("Starting InAppMessaging runtime with Installation ID " + id);
+            });
 
     Disposable unused =
         inAppMessageStreamManager
@@ -92,9 +99,6 @@ public class FirebaseInAppMessaging {
   /**
    * Gets FirebaseInAppMessaging instance using the firebase app returned by {@link
    * FirebaseApp#getInstance()}
-   *
-   * @param
-   * @return
    */
   @NonNull
   public static FirebaseInAppMessaging getInstance() {

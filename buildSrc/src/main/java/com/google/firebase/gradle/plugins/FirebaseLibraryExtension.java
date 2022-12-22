@@ -91,7 +91,6 @@ public class FirebaseLibraryExtension {
 
   private FirebaseStaticAnalysis initializeStaticAnalysis(Project project) {
     return new FirebaseStaticAnalysis(
-        projectsFromProperty(project, "firebase.checks.errorproneProjects"),
         projectsFromProperty(project, "firebase.checks.lintProjects"));
   }
 
@@ -119,6 +118,14 @@ public class FirebaseLibraryExtension {
           releaseWithProject.getExtensions().getByType(FirebaseLibraryExtension.class);
       releaseWithLibrary.librariesToCoRelease.add(this);
       this.project.setVersion(releaseWithProject.getVersion());
+
+      LibraryExtension android = project.getExtensions().findByType(LibraryExtension.class);
+      if (android != null) {
+        android.defaultConfig(
+            cfg -> {
+              cfg.buildConfigField("String", "VERSION_NAME", "\"" + project.getVersion() + "\"");
+            });
+      }
 
       String latestRelease = "latestReleasedVersion";
       if (releaseWithProject.hasProperty(latestRelease)) {

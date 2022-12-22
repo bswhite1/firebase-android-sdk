@@ -24,6 +24,7 @@ import static org.mockito.Mockito.when;
 import androidx.test.core.app.ApplicationProvider;
 import com.google.android.gms.tasks.Task;
 import com.google.android.gms.tasks.Tasks;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.appcheck.AppCheckProvider;
 import com.google.firebase.appcheck.AppCheckProviderFactory;
@@ -31,8 +32,8 @@ import com.google.firebase.appcheck.AppCheckToken;
 import com.google.firebase.appcheck.AppCheckTokenResult;
 import com.google.firebase.appcheck.FirebaseAppCheck.AppCheckListener;
 import com.google.firebase.appcheck.interop.AppCheckTokenListener;
-import com.google.firebase.heartbeatinfo.HeartBeatInfo;
-import com.google.firebase.platforminfo.UserAgentPublisher;
+import com.google.firebase.concurrent.TestOnlyExecutors;
+import com.google.firebase.heartbeatinfo.HeartBeatController;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -41,10 +42,12 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.LooperMode;
 
 /** Tests for {@link DefaultFirebaseAppCheck}. */
 @RunWith(RobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
+@LooperMode(LooperMode.Mode.LEGACY)
 public class DefaultFirebaseAppCheckTest {
 
   private static final String EXCEPTION_TEXT = "exceptionText";
@@ -58,8 +61,7 @@ public class DefaultFirebaseAppCheckTest {
   @Mock private AppCheckProvider mockAppCheckProvider;
   @Mock private AppCheckTokenListener mockAppCheckTokenListener;
   @Mock private AppCheckListener mockAppCheckListener;
-  @Mock private UserAgentPublisher mockUserAgentPublisher;
-  @Mock private HeartBeatInfo mockHeartBeatInfo;
+  @Mock private HeartBeatController mockHeartBeatController;
 
   private DefaultAppCheckToken validDefaultAppCheckToken;
   private DefaultFirebaseAppCheck defaultFirebaseAppCheck;
@@ -75,9 +77,15 @@ public class DefaultFirebaseAppCheckTest {
     when(mockAppCheckProviderFactory.create(any())).thenReturn(mockAppCheckProvider);
     when(mockAppCheckProvider.getToken()).thenReturn(Tasks.forResult(validDefaultAppCheckToken));
 
+    // TODO(b/258273630): Use TestOnlyExecutors instead of MoreExecutors.directExecutor().
     defaultFirebaseAppCheck =
         new DefaultFirebaseAppCheck(
-            mockFirebaseApp, () -> mockUserAgentPublisher, () -> mockHeartBeatInfo);
+            mockFirebaseApp,
+            () -> mockHeartBeatController,
+            TestOnlyExecutors.ui(),
+            /* liteExecutor= */ MoreExecutors.directExecutor(),
+            /* backgroundExecutor= */ MoreExecutors.directExecutor(),
+            TestOnlyExecutors.blocking());
   }
 
   @Test
@@ -85,25 +93,28 @@ public class DefaultFirebaseAppCheckTest {
     assertThrows(
         NullPointerException.class,
         () -> {
-          new DefaultFirebaseAppCheck(null, () -> mockUserAgentPublisher, () -> mockHeartBeatInfo);
+          new DefaultFirebaseAppCheck(
+              null,
+              () -> mockHeartBeatController,
+              TestOnlyExecutors.ui(),
+              TestOnlyExecutors.lite(),
+              TestOnlyExecutors.background(),
+              TestOnlyExecutors.blocking());
         });
   }
 
   @Test
-  public void testConstructor_nullUserAgentPublisherProvider_expectThrows() {
+  public void testConstructor_nullHeartBeatControllerProvider_expectThrows() {
     assertThrows(
         NullPointerException.class,
         () -> {
-          new DefaultFirebaseAppCheck(mockFirebaseApp, null, () -> mockHeartBeatInfo);
-        });
-  }
-
-  @Test
-  public void testConstructor_nullHeartBeatInfoProvider_expectThrows() {
-    assertThrows(
-        NullPointerException.class,
-        () -> {
-          new DefaultFirebaseAppCheck(mockFirebaseApp, () -> mockUserAgentPublisher, null);
+          new DefaultFirebaseAppCheck(
+              mockFirebaseApp,
+              null,
+              TestOnlyExecutors.ui(),
+              TestOnlyExecutors.lite(),
+              TestOnlyExecutors.background(),
+              TestOnlyExecutors.blocking());
         });
   }
 

@@ -14,12 +14,11 @@
 
 package com.google.firebase.installations;
 
+import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
-import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +37,7 @@ import androidx.test.core.app.ApplicationProvider;
 import com.google.android.gms.tasks.Task;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import com.google.firebase.components.Lazy;
 import com.google.firebase.installations.FirebaseInstallationsException.Status;
 import com.google.firebase.installations.internal.FidListenerHandle;
 import com.google.firebase.installations.local.IidStore;
@@ -162,7 +162,7 @@ public class FirebaseInstallationsTest {
             mockBackend,
             persistedInstallation,
             utils,
-            mockIidStore,
+            new Lazy(() -> mockIidStore),
             mockFidGenerator);
 
     when(mockFidGenerator.createRandomFid()).thenReturn(TEST_FID_1);
@@ -206,7 +206,7 @@ public class FirebaseInstallationsTest {
     String fid = onCompleteListener.await();
     assertWithMessage("getId Task failed.").that(fid).isEqualTo(TEST_FID_1);
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
 
     // Waiting for Task that registers FID on the FIS Servers
     executor.awaitTermination(500, TimeUnit.MILLISECONDS);
@@ -214,7 +214,7 @@ public class FirebaseInstallationsTest {
     // The storage should still have the same ID and the status should indicate that the
     // fid is registered.
     entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
     assertTrue("the entry isn't unregistered: " + entry, entry.isUnregistered());
   }
 
@@ -241,7 +241,7 @@ public class FirebaseInstallationsTest {
     String fid = onCompleteListener.await();
     assertWithMessage("getId Task failed.").that(fid).isEqualTo(TEST_INSTANCE_ID_1);
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_INSTANCE_ID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_INSTANCE_ID_1);
 
     // Waiting for Task that registers FID on the FIS Servers
     executor.awaitTermination(500, TimeUnit.MILLISECONDS);
@@ -249,7 +249,7 @@ public class FirebaseInstallationsTest {
     // The storage should still have the same ID and the status should indicate that the
     // fid is registered.
     entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_INSTANCE_ID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_INSTANCE_ID_1);
     assertTrue("the entry doesn't have an uregistered fid: " + entry, entry.isUnregistered());
   }
 
@@ -278,7 +278,7 @@ public class FirebaseInstallationsTest {
     // The storage should still have the same ID and the status should indicate that the
     // fid is registered.
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo("generatedFid"));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo("generatedFid");
     assertTrue("the entry doesn't have an uregistered fid: " + entry, entry.isUnregistered());
   }
 
@@ -312,7 +312,7 @@ public class FirebaseInstallationsTest {
 
     // check that the fid is still the expected one and is registered
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
     assertTrue("the entry doesn't have a registered fid: " + entry, entry.isRegistered());
   }
 
@@ -349,7 +349,7 @@ public class FirebaseInstallationsTest {
 
     // check that the fid is still the expected one and is registered
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
     assertTrue("the entry doesn't have a registered fid: " + entry, entry.isRegistered());
   }
 
@@ -367,7 +367,7 @@ public class FirebaseInstallationsTest {
         .commit();
 
     IidStore iidStore = new IidStore(prefs, "123");
-    assertThat(iidStore.readToken(), equalTo("tokenWILDCARD"));
+    assertThat(iidStore.readToken()).isEqualTo("tokenWILDCARD");
   }
 
   @Test
@@ -384,7 +384,7 @@ public class FirebaseInstallationsTest {
         .commit();
 
     IidStore iidStore = new IidStore(prefs, "123");
-    assertThat(iidStore.readToken(), equalTo("tokenFCM"));
+    assertThat(iidStore.readToken()).isEqualTo("tokenFCM");
   }
 
   @Test
@@ -401,7 +401,7 @@ public class FirebaseInstallationsTest {
         .commit();
 
     IidStore iidStore = new IidStore(prefs, "123");
-    assertThat(iidStore.readToken(), equalTo("tokenGCM"));
+    assertThat(iidStore.readToken()).isEqualTo("tokenGCM");
   }
 
   @Test
@@ -418,7 +418,7 @@ public class FirebaseInstallationsTest {
         .commit();
 
     IidStore iidStore = new IidStore(prefs, "123");
-    assertThat(iidStore.readToken(), equalTo("tokenEMPTY"));
+    assertThat(iidStore.readToken()).isEqualTo("tokenEMPTY");
   }
 
   @Test
@@ -452,7 +452,7 @@ public class FirebaseInstallationsTest {
         .commit();
 
     IidStore iidStore = new IidStore(prefs, "123");
-    assertThat(iidStore.readToken(), equalTo("thetoken"));
+    assertThat(iidStore.readToken()).isEqualTo("thetoken");
   }
 
   @Test
@@ -489,10 +489,10 @@ public class FirebaseInstallationsTest {
     // Waiting for Task that registers FID on the FIS Servers
     executor.awaitTermination(500, TimeUnit.MILLISECONDS);
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_2));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_2);
 
     // Verify FidListener receives fid changes.
-    assertThat(fidListener.getLatestFid(), equalTo(TEST_FID_2));
+    assertThat(fidListener.getLatestFid()).isEqualTo(TEST_FID_2);
     assertNull(fidListener2.getLatestFid());
   }
 
@@ -512,7 +512,7 @@ public class FirebaseInstallationsTest {
     String fid = onCompleteListener.await();
     assertWithMessage("getId Task failed.").that(fid).isEqualTo(TEST_INSTANCE_ID_1);
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_INSTANCE_ID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_INSTANCE_ID_1);
 
     // Waiting for Task that registers FID on the FIS Servers
     executor.awaitTermination(500, TimeUnit.MILLISECONDS);
@@ -520,7 +520,7 @@ public class FirebaseInstallationsTest {
     // The storage should still have the same ID and the status should indicate that the
     // fid si registered.
     entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_INSTANCE_ID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_INSTANCE_ID_1);
     assertTrue("the entry doesn't have a registered fid: " + entry, entry.isRegistered());
   }
 
@@ -554,7 +554,7 @@ public class FirebaseInstallationsTest {
     verify(mockBackend, times(1))
         .createFirebaseInstallation(TEST_API_KEY, TEST_FID_1, TEST_PROJECT_ID, TEST_APP_ID_1, null);
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
     assertTrue("the entry isn't doesn't have a registered fid: " + entry, entry.isRegistered());
   }
 
@@ -591,7 +591,7 @@ public class FirebaseInstallationsTest {
 
     // Validate that registration status is still REGISTER
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
     assertTrue("the entry doesn't have a registered fid: " + entry, entry.isRegistered());
   }
 
@@ -712,7 +712,7 @@ public class FirebaseInstallationsTest {
     // There is nothing more we can do.
     PersistedInstallationEntry updatedInstallationEntry =
         persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(updatedInstallationEntry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(updatedInstallationEntry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
     assertTrue(
         "the entry doesn't have an error fid: " + updatedInstallationEntry,
         updatedInstallationEntry.isErrored());
@@ -743,7 +743,7 @@ public class FirebaseInstallationsTest {
     // We expect that the IOException will cause the request to fail, but it will not
     // cause the FID to be put into the error state because we expect this to eventually succeed.
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getFirebaseInstallationId(), equalTo(TEST_FID_1));
+    assertThat(entry.getFirebaseInstallationId()).isEqualTo(TEST_FID_1);
     assertTrue("the entry doesn't have an unregistered fid: " + entry, entry.isUnregistered());
   }
 
@@ -760,7 +760,7 @@ public class FirebaseInstallationsTest {
     onCompleteListener.await();
 
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getAuthToken(), equalTo(TEST_AUTH_TOKEN));
+    assertThat(entry.getAuthToken()).isEqualTo(TEST_AUTH_TOKEN);
   }
 
   @Test
@@ -1018,7 +1018,7 @@ public class FirebaseInstallationsTest {
     verify(mockBackend, times(1))
         .generateAuthToken(TEST_API_KEY, TEST_FID_1, TEST_PROJECT_ID, TEST_REFRESH_TOKEN);
     PersistedInstallationEntry entry = persistedInstallation.readPersistedInstallationEntryValue();
-    assertThat(entry.getAuthToken(), equalTo(TEST_AUTH_TOKEN_3));
+    assertThat(entry.getAuthToken()).isEqualTo(TEST_AUTH_TOKEN_3);
   }
 
   @Test

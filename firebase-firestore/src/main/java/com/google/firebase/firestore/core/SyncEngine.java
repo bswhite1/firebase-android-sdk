@@ -26,6 +26,7 @@ import com.google.firebase.database.collection.ImmutableSortedSet;
 import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.LoadBundleTask;
 import com.google.firebase.firestore.LoadBundleTaskProgress;
+import com.google.firebase.firestore.TransactionOptions;
 import com.google.firebase.firestore.auth.User;
 import com.google.firebase.firestore.bundle.BundleElement;
 import com.google.firebase.firestore.bundle.BundleLoader;
@@ -53,6 +54,7 @@ import com.google.firebase.firestore.util.AsyncQueue;
 import com.google.firebase.firestore.util.Function;
 import com.google.firebase.firestore.util.Logger;
 import com.google.firebase.firestore.util.Util;
+import com.google.protobuf.ByteString;
 import io.grpc.Status;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -203,13 +205,16 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     TargetData targetData = localStore.allocateTarget(query.toTarget());
     remoteStore.listen(targetData);
 
-    ViewSnapshot viewSnapshot = initializeViewAndComputeSnapshot(query, targetData.getTargetId());
+    ViewSnapshot viewSnapshot =
+        initializeViewAndComputeSnapshot(
+            query, targetData.getTargetId(), targetData.getResumeToken());
     syncEngineListener.onViewSnapshots(Collections.singletonList(viewSnapshot));
 
     return targetData.getTargetId();
   }
 
-  private ViewSnapshot initializeViewAndComputeSnapshot(Query query, int targetId) {
+  private ViewSnapshot initializeViewAndComputeSnapshot(
+      Query query, int targetId, ByteString resumeToken) {
     QueryResult queryResult = localStore.executeQuery(query, /* usePreviousResults= */ true);
 
     SyncState currentTargetSyncState = SyncState.NONE;
@@ -220,10 +225,10 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     if (this.queriesByTarget.get(targetId) != null) {
       Query mirrorQuery = this.queriesByTarget.get(targetId).get(0);
       currentTargetSyncState = this.queryViewsByQuery.get(mirrorQuery).getView().getSyncState();
-      synthesizedCurrentChange =
-          TargetChange.createSynthesizedTargetChangeForCurrentChange(
-              currentTargetSyncState == SyncState.SYNCED);
     }
+    synthesizedCurrentChange =
+        TargetChange.createSynthesizedTargetChangeForCurrentChange(
+            currentTargetSyncState == SyncState.SYNCED, resumeToken);
 
     // TODO(wuandy): Investigate if we can extract the logic of view change computation and
     // update tracked limbo in one place, and have both emitNewSnapsAndNotifyLocalStore
@@ -307,9 +312,15 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
    * <p>The Task returned is resolved when the transaction is fully committed.
    */
   public <TResult> Task<TResult> transaction(
-      AsyncQueue asyncQueue, Function<Transaction, Task<TResult>> updateFunction) {
-    Logger.debug("Ben_SyncEngine", "Entered transaction");
-    return new TransactionRunner<TResult>(asyncQueue, remoteStore, updateFunction).run();
+      AsyncQueue asyncQueue,
+      TransactionOptions options,
+      Function<Transaction, Task<TResult>> updateFunction) {
+      Logger.debug("Ben_SyncEngine", "Entered transaction");
+      return new TransactionRunner<TResult>(asyncQueue, remoteStore, options, updateFunction).run();
+  }
+
+  public Task<Long> runCountQuery(Query query) {
+    return remoteStore.runCountQuery(query);
   }
 
   /** Called by FirestoreClient to notify us of a new remote event. */

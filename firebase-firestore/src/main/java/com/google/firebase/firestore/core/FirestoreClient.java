@@ -16,6 +16,7 @@ package com.google.firebase.firestore.core;
 
 import static com.google.firebase.firestore.util.Assert.hardAssert;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import androidx.annotation.Nullable;
 import com.google.android.gms.tasks.Task;
@@ -26,6 +27,7 @@ import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.FirebaseFirestoreException.Code;
 import com.google.firebase.firestore.FirebaseFirestoreSettings;
 import com.google.firebase.firestore.LoadBundleTask;
+import com.google.firebase.firestore.TransactionOptions;
 import com.google.firebase.firestore.auth.CredentialsProvider;
 import com.google.firebase.firestore.auth.User;
 import com.google.firebase.firestore.bundle.BundleReader;
@@ -187,6 +189,8 @@ public final class FirestoreClient {
     asyncQueue.enqueueAndForget(() -> eventManager.removeQueryListener(listener));
   }
 
+  // TODO(b/261013682): Use an explicit executor in continuations.
+  @SuppressLint("TaskMainThread")
   public Task<Document> getDocumentFromLocalCache(DocumentKey docKey) {
     this.verifyNotTerminated();
     return asyncQueue
@@ -228,11 +232,27 @@ public final class FirestoreClient {
   }
 
   /** Tries to execute the transaction in updateFunction. */
-  public <TResult> Task<TResult> transaction(Function<Transaction, Task<TResult>> updateFunction) {
+  public <TResult> Task<TResult> transaction(
+      TransactionOptions options, Function<Transaction, Task<TResult>> updateFunction) {
     this.verifyNotTerminated();
     Logger.debug("Ben_Firebase", "transaction calling AsyncQueue.callTask");
     return AsyncQueue.callTask(
-        asyncQueue.getExecutor(), () -> syncEngine.transaction(asyncQueue, updateFunction));
+        asyncQueue.getExecutor(),
+        () -> syncEngine.transaction(asyncQueue, options, updateFunction));
+  }
+
+  // TODO(b/261013682): Use an explicit executor in continuations.
+  @SuppressLint("TaskMainThread")
+  public Task<Long> runCountQuery(Query query) {
+    this.verifyNotTerminated();
+    final TaskCompletionSource<Long> result = new TaskCompletionSource<>();
+    asyncQueue.enqueueAndForget(
+        () ->
+            syncEngine
+                .runCountQuery(query)
+                .addOnSuccessListener(count -> result.setResult(count))
+                .addOnFailureListener(e -> result.setException(e)));
+    return result.getTask();
   }
 
   /**

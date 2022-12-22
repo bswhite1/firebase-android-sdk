@@ -33,7 +33,7 @@ import com.google.firebase.crashlytics.internal.model.ImmutableList;
 import com.google.firebase.crashlytics.internal.persistence.CrashlyticsReportPersistence;
 import com.google.firebase.crashlytics.internal.persistence.FileStore;
 import com.google.firebase.crashlytics.internal.send.DataTransportCrashlyticsReportSender;
-import com.google.firebase.crashlytics.internal.settings.SettingsDataProvider;
+import com.google.firebase.crashlytics.internal.settings.SettingsProvider;
 import com.google.firebase.crashlytics.internal.stacktrace.StackTraceTrimmingStrategy;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -67,13 +67,14 @@ public class SessionReportingCoordinator implements CrashlyticsLifecycleEvents {
       LogFileManager logFileManager,
       UserMetadata userMetadata,
       StackTraceTrimmingStrategy stackTraceTrimmingStrategy,
-      SettingsDataProvider settingsProvider) {
+      SettingsProvider settingsProvider,
+      OnDemandCounter onDemandCounter) {
     final CrashlyticsReportDataCapture dataCapture =
         new CrashlyticsReportDataCapture(context, idManager, appData, stackTraceTrimmingStrategy);
     final CrashlyticsReportPersistence reportPersistence =
         new CrashlyticsReportPersistence(fileStore, settingsProvider);
     final DataTransportCrashlyticsReportSender reportSender =
-        DataTransportCrashlyticsReportSender.create(context);
+        DataTransportCrashlyticsReportSender.create(context, settingsProvider, onDemandCounter);
     return new SessionReportingCoordinator(
         dataCapture, reportPersistence, reportSender, logFileManager, userMetadata);
   }
@@ -202,14 +203,21 @@ public class SessionReportingCoordinator implements CrashlyticsLifecycleEvents {
    *     sent.
    */
   public Task<Void> sendReports(@NonNull Executor reportSendCompleteExecutor) {
+    return sendReports(reportSendCompleteExecutor, /*sessionId=*/ null);
+  }
+
+  public Task<Void> sendReports(
+      @NonNull Executor reportSendCompleteExecutor, @Nullable String sessionId) {
     final List<CrashlyticsReportWithSessionId> reportsToSend =
         reportPersistence.loadFinalizedReports();
     final List<Task<Boolean>> sendTasks = new ArrayList<>();
     for (CrashlyticsReportWithSessionId reportToSend : reportsToSend) {
-      sendTasks.add(
-          reportsSender
-              .sendReport(reportToSend)
-              .continueWith(reportSendCompleteExecutor, this::onReportSendComplete));
+      if (sessionId == null || sessionId.equals(reportToSend.getSessionId())) {
+        sendTasks.add(
+            reportsSender
+                .enqueueReport(reportToSend, sessionId != null)
+                .continueWith(reportSendCompleteExecutor, this::onReportSendComplete));
+      }
     }
     return Tasks.whenAll(sendTasks);
   }

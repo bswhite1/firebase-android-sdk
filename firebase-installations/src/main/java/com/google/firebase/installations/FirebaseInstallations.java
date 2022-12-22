@@ -14,6 +14,7 @@
 
 package com.google.firebase.installations;
 
+import android.annotation.SuppressLint;
 import android.text.TextUtils;
 import androidx.annotation.GuardedBy;
 import androidx.annotation.NonNull;
@@ -25,6 +26,7 @@ import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.android.gms.tasks.Tasks;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
+import com.google.firebase.components.Lazy;
 import com.google.firebase.heartbeatinfo.HeartBeatController;
 import com.google.firebase.inject.Provider;
 import com.google.firebase.installations.FirebaseInstallationsException.Status;
@@ -65,7 +67,7 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
   private final FirebaseInstallationServiceClient serviceClient;
   private final PersistedInstallation persistedInstallation;
   private final Utils utils;
-  private final IidStore iidStore;
+  private final Lazy<IidStore> iidStore;
   private final RandomFidGenerator fidGenerator;
   private final Object lock = new Object();
   private final ExecutorService backgroundExecutor;
@@ -95,6 +97,8 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
         private final AtomicInteger mCount = new AtomicInteger(1);
 
         @Override
+        // TODO(b/258422917): Migrate to go/firebase-android-executors
+        @SuppressLint("ThreadPoolCreation")
         public Thread newThread(Runnable r) {
           return new Thread(
               r, String.format("firebase-installations-executor-%d", mCount.getAndIncrement()));
@@ -122,6 +126,8 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
           + "Please retry your last request.";
 
   /** package private constructor. */
+  // TODO(b/258422917): Migrate to go/firebase-android-executors
+  @SuppressLint("ThreadPoolCreation")
   FirebaseInstallations(
       FirebaseApp firebaseApp, @NonNull Provider<HeartBeatController> heartBeatProvider) {
     this(
@@ -137,17 +143,19 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
             firebaseApp.getApplicationContext(), heartBeatProvider),
         new PersistedInstallation(firebaseApp),
         Utils.getInstance(),
-        new IidStore(firebaseApp),
+        new Lazy<>(() -> new IidStore(firebaseApp)),
         new RandomFidGenerator());
   }
 
+  // TODO(b/258422917): Migrate to go/firebase-android-executors
+  @SuppressLint("ThreadPoolCreation")
   FirebaseInstallations(
       ExecutorService backgroundExecutor,
       FirebaseApp firebaseApp,
       FirebaseInstallationServiceClient serviceClient,
       PersistedInstallation persistedInstallation,
       Utils utils,
-      IidStore iidStore,
+      Lazy<IidStore> iidStore,
       RandomFidGenerator fidGenerator) {
     this.firebaseApp = firebaseApp;
     this.serviceClient = serviceClient;
@@ -266,7 +274,7 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
 
   /**
    * Call to delete this Firebase app installation from the Firebase backend. This call may cause
-   * Firebase Cloud Messaging, Firebase Remote Config, Firebase Predictions, or Firebase In-App
+   * Firebase Cloud Messaging, Firebase Remote Config, Firebase A/B Testing, or Firebase In-App
    * Messaging to not function properly.
    */
   @NonNull
@@ -374,6 +382,10 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
     networkExecutor.execute(() -> doNetworkCallIfNecessary(forceRefresh));
   }
 
+  private IidStore getIidStore() {
+    return iidStore.get();
+  }
+
   private void doNetworkCallIfNecessary(boolean forceRefresh) {
     PersistedInstallationEntry prefs = getMultiProcessSafePrefs();
     // There are two possible cleanup steps to perform at this stage: the FID may need to
@@ -422,7 +434,8 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
   private synchronized void updateFidListener(
       PersistedInstallationEntry prefs, PersistedInstallationEntry updatedPrefs) {
     if (fidListeners.size() != 0
-        && !prefs.getFirebaseInstallationId().equals(updatedPrefs.getFirebaseInstallationId())) {
+        && !TextUtils.equals(
+            prefs.getFirebaseInstallationId(), updatedPrefs.getFirebaseInstallationId())) {
       // Update all the registered FidListener about fid changes.
       for (FidListener listener : fidListeners) {
         listener.onFidChanged(updatedPrefs.getFirebaseInstallationId());
@@ -505,7 +518,7 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
       return fidGenerator.createRandomFid();
     }
     // For a default/chime firebase installation, read the existing iid from shared prefs
-    String fid = iidStore.readIid();
+    String fid = getIidStore().readIid();
     if (TextUtils.isEmpty(fid)) {
       fid = fidGenerator.createRandomFid();
     }
@@ -523,7 +536,7 @@ public class FirebaseInstallations implements FirebaseInstallationsApi {
         && prefs.getFirebaseInstallationId().length() == 11) {
       // For a default firebase installation, read the stored star scoped iid token. This token
       // will be used for authenticating Instance-ID when migrating to FIS.
-      iidToken = iidStore.readToken();
+      iidToken = getIidStore().readToken();
     }
 
     InstallationResponse response =

@@ -18,18 +18,27 @@ import androidx.annotation.Keep
 import com.google.firebase.FirebaseApp
 import com.google.firebase.components.Component
 import com.google.firebase.components.ComponentRegistrar
+import com.google.firebase.firestore.DocumentReference
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.FirebaseFirestoreSettings
+import com.google.firebase.firestore.MetadataChanges
+import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.QueryDocumentSnapshot
 import com.google.firebase.firestore.QuerySnapshot
+import com.google.firebase.firestore.util.Executors.BACKGROUND_EXECUTOR
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.platforminfo.LibraryVersionComponent
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.channels.trySendBlocking
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 
 /** Returns the [FirebaseFirestore] instance of the default [FirebaseApp]. */
 val Firebase.firestore: FirebaseFirestore
-    get() = FirebaseFirestore.getInstance()
+  get() = FirebaseFirestore.getInstance()
 
 /** Returns the [FirebaseFirestore] instance of a given [FirebaseApp]. */
 fun Firebase.firestore(app: FirebaseApp): FirebaseFirestore = FirebaseFirestore.getInstance(app)
@@ -39,7 +48,9 @@ fun Firebase.firestore(app: FirebaseApp): FirebaseFirestore = FirebaseFirestore.
  *
  * @param T The type of the object to create.
  * @return The contents of the document in an object of type T or null if the document doesn't
+ * ```
  *     exist.
+ * ```
  */
 inline fun <reified T> DocumentSnapshot.toObject(): T? = toObject(T::class.java)
 
@@ -48,14 +59,18 @@ inline fun <reified T> DocumentSnapshot.toObject(): T? = toObject(T::class.java)
  *
  * @param T The type of the object to create.
  * @param serverTimestampBehavior Configures the behavior for server timestamps that have not yet
+ * ```
  *     been set to their final value.
- * @return The contents of the document in an object of type T or null if the document doesn't
+ * @return
+ * ```
+ * The contents of the document in an object of type T or null if the document doesn't
+ * ```
  *     exist.
+ * ```
  */
 inline fun <reified T> DocumentSnapshot.toObject(
-    serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
-): T? =
-        toObject(T::class.java, serverTimestampBehavior)
+  serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
+): T? = toObject(T::class.java, serverTimestampBehavior)
 
 /**
  * Returns the value at the field, converted to a POJO, or null if the field or document doesn't
@@ -74,14 +89,16 @@ inline fun <reified T> DocumentSnapshot.getField(field: String): T? = get(field,
  * @param field The path to the field.
  * @param T The type to convert the field value to.
  * @param serverTimestampBehavior Configures the behavior for server timestamps that have not yet
+ * ```
  *     been set to their final value.
- * @return The value at the given field or null.
+ * @return
+ * ```
+ * The value at the given field or null.
  */
 inline fun <reified T> DocumentSnapshot.getField(
-    field: String,
-    serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
-): T? =
-        get(field, T::class.java, serverTimestampBehavior)
+  field: String,
+  serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
+): T? = get(field, T::class.java, serverTimestampBehavior)
 
 /**
  * Returns the value at the field, converted to a POJO, or null if the field or document doesn't
@@ -91,7 +108,8 @@ inline fun <reified T> DocumentSnapshot.getField(
  * @param T The type to convert the field value to.
  * @return The value at the given field or null.
  */
-inline fun <reified T> DocumentSnapshot.getField(fieldPath: FieldPath): T? = get(fieldPath, T::class.java)
+inline fun <reified T> DocumentSnapshot.getField(fieldPath: FieldPath): T? =
+  get(fieldPath, T::class.java)
 
 /**
  * Returns the value at the field, converted to a POJO, or null if the field or document doesn't
@@ -100,14 +118,16 @@ inline fun <reified T> DocumentSnapshot.getField(fieldPath: FieldPath): T? = get
  * @param fieldPath The path to the field.
  * @param T The type to convert the field value to.
  * @param serverTimestampBehavior Configures the behavior for server timestamps that have not yet
+ * ```
  *     been set to their final value.
- * @return The value at the given field or null.
+ * @return
+ * ```
+ * The value at the given field or null.
  */
 inline fun <reified T> DocumentSnapshot.getField(
-    fieldPath: FieldPath,
-    serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
-): T? =
-        get(fieldPath, T::class.java, serverTimestampBehavior)
+  fieldPath: FieldPath,
+  serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
+): T? = get(fieldPath, T::class.java, serverTimestampBehavior)
 
 /**
  * Returns the contents of the document converted to a POJO.
@@ -122,36 +142,45 @@ inline fun <reified T : Any> QueryDocumentSnapshot.toObject(): T = toObject(T::c
  *
  * @param T The type of the object to create.
  * @param serverTimestampBehavior Configures the behavior for server timestamps that have not yet
+ * ```
  *     been set to their final value.
- * @return The contents of the document in an object of type T.
+ * @return
+ * ```
+ * The contents of the document in an object of type T.
  */
-inline fun <reified T : Any> QueryDocumentSnapshot.toObject(serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior): T =
-        toObject(T::class.java, serverTimestampBehavior)
+inline fun <reified T : Any> QueryDocumentSnapshot.toObject(
+  serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
+): T = toObject(T::class.java, serverTimestampBehavior)
 
 /**
- * Returns the contents of the documents in the QuerySnapshot, converted to the provided class, as
- * a list.
+ * Returns the contents of the documents in the QuerySnapshot, converted to the provided class, as a
+ * list.
  *
  * @param T The POJO type used to convert the documents in the list.
  */
 inline fun <reified T : Any> QuerySnapshot.toObjects(): List<T> = toObjects(T::class.java)
 
 /**
- * Returns the contents of the documents in the QuerySnapshot, converted to the provided class, as
- * a list.
+ * Returns the contents of the documents in the QuerySnapshot, converted to the provided class, as a
+ * list.
  *
  * @param T The POJO type used to convert the documents in the list.
  * @param serverTimestampBehavior Configures the behavior for server timestamps that have not yet
+ * ```
  *     been set to their final value.
+ * ```
  */
-inline fun <reified T : Any> QuerySnapshot.toObjects(serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior): List<T> =
-        toObjects(T::class.java, serverTimestampBehavior)
+inline fun <reified T : Any> QuerySnapshot.toObjects(
+  serverTimestampBehavior: DocumentSnapshot.ServerTimestampBehavior
+): List<T> = toObjects(T::class.java, serverTimestampBehavior)
 
 /** Returns a [FirebaseFirestoreSettings] instance initialized using the [init] function. */
-fun firestoreSettings(init: FirebaseFirestoreSettings.Builder.() -> Unit): FirebaseFirestoreSettings {
-    val builder = FirebaseFirestoreSettings.Builder()
-    builder.init()
-    return builder.build()
+fun firestoreSettings(
+  init: FirebaseFirestoreSettings.Builder.() -> Unit
+): FirebaseFirestoreSettings {
+  val builder = FirebaseFirestoreSettings.Builder()
+  builder.init()
+  return builder.build()
 }
 
 internal const val LIBRARY_NAME: String = "fire-fst-ktx"
@@ -159,6 +188,55 @@ internal const val LIBRARY_NAME: String = "fire-fst-ktx"
 /** @suppress */
 @Keep
 class FirebaseFirestoreKtxRegistrar : ComponentRegistrar {
-    override fun getComponents(): List<Component<*>> =
-            listOf(LibraryVersionComponent.create(LIBRARY_NAME, BuildConfig.VERSION_NAME))
+  override fun getComponents(): List<Component<*>> =
+    listOf(LibraryVersionComponent.create(LIBRARY_NAME, BuildConfig.VERSION_NAME))
+}
+
+/**
+ * Starts listening to the document referenced by this `DocumentReference` with the given options
+ * and emits its values via a [Flow].
+ *
+ * - When the returned flow starts being collected, an [EventListener] will be attached.
+ * - When the flow completes, the listener will be removed.
+ *
+ * @param metadataChanges controls metadata-only changes. Default: [MetadataChanges.EXCLUDE]
+ */
+fun DocumentReference.snapshots(
+  metadataChanges: MetadataChanges = MetadataChanges.EXCLUDE
+): Flow<DocumentSnapshot> {
+  return callbackFlow {
+    val registration =
+      addSnapshotListener(BACKGROUND_EXECUTOR, metadataChanges) { snapshot, exception ->
+        if (exception != null) {
+          cancel(message = "Error getting DocumentReference snapshot", cause = exception)
+        } else if (snapshot != null) {
+          trySendBlocking(snapshot)
+        }
+      }
+    awaitClose { registration.remove() }
+  }
+}
+
+/**
+ * Starts listening to this query with the given options and emits its values via a [Flow].
+ *
+ * - When the returned flow starts being collected, an [EventListener] will be attached.
+ * - When the flow completes, the listener will be removed.
+ *
+ * @param metadataChanges controls metadata-only changes. Default: [MetadataChanges.EXCLUDE]
+ */
+fun Query.snapshots(
+  metadataChanges: MetadataChanges = MetadataChanges.EXCLUDE
+): Flow<QuerySnapshot> {
+  return callbackFlow {
+    val registration =
+      addSnapshotListener(BACKGROUND_EXECUTOR, metadataChanges) { snapshot, exception ->
+        if (exception != null) {
+          cancel(message = "Error getting Query snapshot", cause = exception)
+        } else if (snapshot != null) {
+          trySendBlocking(snapshot)
+        }
+      }
+    awaitClose { registration.remove() }
+  }
 }

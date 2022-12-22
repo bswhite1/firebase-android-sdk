@@ -21,7 +21,9 @@ import com.google.firebase.analytics.connector.AnalyticsConnector;
 import com.google.firebase.components.Component;
 import com.google.firebase.components.ComponentRegistrar;
 import com.google.firebase.components.Dependency;
+import com.google.firebase.dynamiclinks.BuildConfig;
 import com.google.firebase.dynamiclinks.FirebaseDynamicLinks;
+import com.google.firebase.platforminfo.LibraryVersionComponent;
 import java.util.Arrays;
 import java.util.List;
 
@@ -35,12 +37,14 @@ import java.util.List;
 @KeepForSdk
 @Keep
 public final class FirebaseDynamicLinkRegistrar implements ComponentRegistrar {
+  private static final String LIBRARY_NAME = "fire-dl";
 
   @Override
   @Keep
   public List<Component<?>> getComponents() {
     Component<FirebaseDynamicLinks> firebaseDynamicLinks =
         Component.builder(FirebaseDynamicLinks.class)
+            .name(LIBRARY_NAME)
             .add(Dependency.required(FirebaseApp.class))
             .add(Dependency.optionalProvider(AnalyticsConnector.class))
             .factory(
@@ -50,6 +54,8 @@ public final class FirebaseDynamicLinkRegistrar implements ComponentRegistrar {
                         container.getProvider(AnalyticsConnector.class)))
             .build(); // no need for eager init for the Internal component.
 
-    return Arrays.asList(firebaseDynamicLinks);
+    return Arrays.asList(
+        firebaseDynamicLinks,
+        LibraryVersionComponent.create(LIBRARY_NAME, BuildConfig.VERSION_NAME));
   }
 }

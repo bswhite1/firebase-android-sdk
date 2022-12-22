@@ -319,8 +319,8 @@ public class MessagingAnalytics {
   /**
    * Asynchronously log an event to Firelog.
    *
-   * <p>Firelog batch-send delivery metrics every 24 hours when the device is idle and have network
-   * connection in a background thread.
+   * <p>Firelog batch-send usually delivery metrics within 1 hour (at most 24 hours) when the device
+   * is idle and have network connection in a background thread.
    */
   private static void logToFirelog(
       MessagingClientEvent.Event event,
@@ -341,10 +341,10 @@ public class MessagingAnalytics {
           .getTransport(
               FirelogAnalytics.FCM_LOG_SOURCE,
               MessagingClientEventExtension.class,
-              Encoding.of("src/main/proto"),
+              Encoding.of("proto"),
               MessagingClientEventExtension::toByteArray)
           .send(
-              Event.ofTelemetry(
+              Event.ofData(
                   MessagingClientEventExtension.newBuilder()
                       .setMessagingClientEvent(clientEvent)
                       .build()));

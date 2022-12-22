@@ -29,7 +29,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
 /** An in-memory implementation of IndexManager. */
 class MemoryIndexManager implements IndexManager {
@@ -61,16 +60,9 @@ class MemoryIndexManager implements IndexManager {
     // Field indices are not supported with memory persistence.
   }
 
-  @Nullable
-  @Override
-  public FieldIndex getFieldIndex(Target target) {
-    // Field indices are not supported with memory persistence.
-    return null;
-  }
-
   @Override
   @Nullable
-  public Set<DocumentKey> getDocumentsMatchingTarget(Target target) {
+  public List<DocumentKey> getDocumentsMatchingTarget(Target target) {
     // Field indices are not supported with memory persistence.
     return null;
   }
@@ -107,6 +99,11 @@ class MemoryIndexManager implements IndexManager {
   @Override
   public IndexOffset getMinOffset(String collectionGroup) {
     return IndexOffset.NONE;
+  }
+
+  @Override
+  public IndexType getIndexType(Target target) {
+    return IndexType.NONE;
   }
 
   @Override

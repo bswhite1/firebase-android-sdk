@@ -14,28 +14,39 @@
 
 package com.google.firebase.firestore.remote;
 
+import static com.google.firebase.firestore.util.Assert.hardAssert;
+import static com.google.firebase.firestore.util.Util.exceptionFromStatus;
+
 import android.content.Context;
 import android.os.Build;
 import androidx.annotation.Nullable;
 import com.google.android.gms.tasks.Task;
+import com.google.android.gms.tasks.TaskCompletionSource;
 import com.google.firebase.firestore.FirebaseFirestoreException;
 import com.google.firebase.firestore.auth.CredentialsProvider;
 import com.google.firebase.firestore.auth.User;
 import com.google.firebase.firestore.core.DatabaseInfo;
+import com.google.firebase.firestore.core.Query;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.MutableDocument;
 import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.model.mutation.Mutation;
 import com.google.firebase.firestore.model.mutation.MutationResult;
 import com.google.firebase.firestore.util.AsyncQueue;
+import com.google.firestore.v1.AggregationResult;
 import com.google.firestore.v1.BatchGetDocumentsRequest;
 import com.google.firestore.v1.BatchGetDocumentsResponse;
 import com.google.firestore.v1.CommitRequest;
 import com.google.firestore.v1.CommitResponse;
 import com.google.firestore.v1.FirestoreGrpc;
+import com.google.firestore.v1.RunAggregationQueryRequest;
+import com.google.firestore.v1.RunAggregationQueryResponse;
+import com.google.firestore.v1.StructuredAggregationQuery;
+import com.google.firestore.v1.Value;
 import io.grpc.Status;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -170,8 +181,67 @@ public class Datastore {
     for (DocumentKey key : keys) {
       builder.addDocuments(serializer.encodeKey(key));
     }
+    List<BatchGetDocumentsResponse> responses = new ArrayList<>();
+    TaskCompletionSource<List<MutableDocument>> completionSource = new TaskCompletionSource<>();
+
+    channel.runStreamingResponseRpc(
+        FirestoreGrpc.getBatchGetDocumentsMethod(),
+        builder.build(),
+        new FirestoreChannel.StreamingListener<BatchGetDocumentsResponse>() {
+          @Override
+          public void onMessage(BatchGetDocumentsResponse message) {
+            responses.add(message);
+            if (responses.size() == keys.size()) {
+              Map<DocumentKey, MutableDocument> resultMap = new HashMap<>();
+              for (BatchGetDocumentsResponse response : responses) {
+                MutableDocument doc = serializer.decodeMaybeDocument(response);
+                resultMap.put(doc.getKey(), doc);
+              }
+              List<MutableDocument> results = new ArrayList<>();
+              for (DocumentKey key : keys) {
+                results.add(resultMap.get(key));
+              }
+              completionSource.trySetResult(results);
+            }
+          }
+
+          @Override
+          public void onClose(Status status) {
+            if (status.isOk()) {
+              completionSource.trySetResult(Collections.emptyList());
+            } else {
+              FirebaseFirestoreException exception = exceptionFromStatus(status);
+              if (exception.getCode() == FirebaseFirestoreException.Code.UNAUTHENTICATED) {
+                channel.invalidateToken();
+              }
+              completionSource.trySetException(exception);
+            }
+          }
+        });
+
+    return completionSource.getTask();
+  }
+
+  public Task<Long> runCountQuery(Query query) {
+    com.google.firestore.v1.Target.QueryTarget encodedQueryTarget =
+        serializer.encodeQueryTarget(query.toTarget());
+
+    StructuredAggregationQuery.Builder structuredAggregationQuery =
+        StructuredAggregationQuery.newBuilder();
+    structuredAggregationQuery.setStructuredQuery(encodedQueryTarget.getStructuredQuery());
+
+    StructuredAggregationQuery.Aggregation.Builder aggregation =
+        StructuredAggregationQuery.Aggregation.newBuilder();
+    aggregation.setCount(StructuredAggregationQuery.Aggregation.Count.getDefaultInstance());
+    aggregation.setAlias("count_alias");
+    structuredAggregationQuery.addAggregations(aggregation);
+
+    RunAggregationQueryRequest.Builder request = RunAggregationQueryRequest.newBuilder();
+    request.setParent(encodedQueryTarget.getParent());
+    request.setStructuredAggregationQuery(structuredAggregationQuery);
+
     return channel
-        .runStreamingResponseRpc(FirestoreGrpc.getBatchGetDocumentsMethod(), builder.build())
+        .runRpc(FirestoreGrpc.getRunAggregationQueryMethod(), request.build())
         .continueWith(
             workerQueue.getExecutor(),
             task -> {
@@ -181,19 +251,22 @@ public class Datastore {
                         == FirebaseFirestoreException.Code.UNAUTHENTICATED) {
                   channel.invalidateToken();
                 }
+                throw task.getException();
               }
 
-              Map<DocumentKey, MutableDocument> resultMap = new HashMap<>();
-              List<BatchGetDocumentsResponse> responses = task.getResult();
-              for (BatchGetDocumentsResponse response : responses) {
-                MutableDocument doc = serializer.decodeMaybeDocument(response);
-                resultMap.put(doc.getKey(), doc);
-              }
-              List<MutableDocument> results = new ArrayList<>();
-              for (DocumentKey key : keys) {
-                results.add(resultMap.get(key));
-              }
-              return results;
+              RunAggregationQueryResponse response = task.getResult();
+
+              AggregationResult aggregationResult = response.getResult();
+              Map<String, Value> aggregateFieldsByAlias = aggregationResult.getAggregateFieldsMap();
+              hardAssert(
+                  aggregateFieldsByAlias.size() == 1,
+                  "aggregateFieldsByAlias.size()==" + aggregateFieldsByAlias.size());
+              Value countValue = aggregateFieldsByAlias.get("count_alias");
+              hardAssert(countValue != null, "countValue == null");
+              hardAssert(
+                  countValue.getValueTypeCase() == Value.ValueTypeCase.INTEGER_VALUE,
+                  "countValue.getValueTypeCase() == " + countValue.getValueTypeCase());
+              return countValue.getIntegerValue();
             });
   }
 

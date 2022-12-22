@@ -19,23 +19,43 @@ import androidx.annotation.Nullable;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.FieldPath;
 import com.google.firebase.firestore.util.Function;
-import com.google.firestore.v1.StructuredQuery.CompositeFilter.Operator;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 /** Represents a filter that is the conjunction or disjunction of other filters. */
 public class CompositeFilter extends Filter {
+  public enum Operator {
+    AND("and"),
+    OR("or");
+
+    private final String text;
+
+    Operator(String text) {
+      this.text = text;
+    }
+
+    @Override
+    public String toString() {
+      return text;
+    }
+  }
+
   private final List<Filter> filters;
   private final Operator operator;
 
+  // Memoized list of all field filters that can be found by traversing the tree of filters
+  // contained in this composite filter.
+  private List<FieldFilter> memoizedFlattenedFilters;
+
   public CompositeFilter(List<Filter> filters, Operator operator) {
-    this.filters = filters;
+    this.filters = new ArrayList<>(filters);
     this.operator = operator;
   }
 
   @Override
   public List<Filter> getFilters() {
-    return filters;
+    return Collections.unmodifiableList(filters);
   }
 
   public Operator getOperator() {
@@ -44,12 +64,14 @@ public class CompositeFilter extends Filter {
 
   @Override
   public List<FieldFilter> getFlattenedFilters() {
-    // TODO(orquery): memoize this result if this method is used more than once.
-    List<FieldFilter> result = new ArrayList<>();
-    for (Filter subfilter : filters) {
-      result.addAll(subfilter.getFlattenedFilters());
+    if (memoizedFlattenedFilters != null) {
+      return Collections.unmodifiableList(memoizedFlattenedFilters);
     }
-    return result;
+    memoizedFlattenedFilters = new ArrayList<>();
+    for (Filter subfilter : filters) {
+      memoizedFlattenedFilters.addAll(subfilter.getFlattenedFilters());
+    }
+    return Collections.unmodifiableList(memoizedFlattenedFilters);
   }
 
   /**
@@ -70,17 +92,20 @@ public class CompositeFilter extends Filter {
   }
 
   public boolean isDisjunction() {
-    // TODO(orquery): Replace with Operator.OR.
-    return operator == Operator.OPERATOR_UNSPECIFIED;
+    return operator == Operator.OR;
   }
 
   /**
    * Returns true if this filter is a conjunction of field filters only. Returns false otherwise.
    */
   public boolean isFlatConjunction() {
-    if (operator != Operator.AND) {
-      return false;
-    }
+    return isFlat() && isConjunction();
+  }
+
+  /**
+   * Returns true if this filter does not contain any composite filters. Returns false otherwise.
+   */
+  public boolean isFlat() {
     for (Filter filter : filters) {
       if (filter instanceof CompositeFilter) {
         return false;
@@ -90,20 +115,24 @@ public class CompositeFilter extends Filter {
   }
 
   /**
+   * Returns a new composite filter that contains all filter from `this` plus all the given filters.
+   */
+  public CompositeFilter withAddedFilters(List<Filter> otherFilters) {
+    List<Filter> mergedFilters = new ArrayList<>(filters);
+    mergedFilters.addAll(otherFilters);
+    return new CompositeFilter(mergedFilters, operator);
+  }
+
+  /**
    * Performs a depth-first search to find and return the first FieldFilter in the composite filter
    * that satisfies the condition. Returns {@code null} if none of the FieldFilters satisfy the
    * condition.
    */
   @Nullable
   private FieldFilter findFirstMatchingFilter(Function<FieldFilter, Boolean> condition) {
-    for (Filter filter : filters) {
-      if (filter instanceof FieldFilter && condition.apply(((FieldFilter) filter))) {
-        return (FieldFilter) filter;
-      } else if (filter instanceof CompositeFilter) {
-        FieldFilter found = ((CompositeFilter) filter).findFirstMatchingFilter(condition);
-        if (found != null) {
-          return found;
-        }
+    for (FieldFilter filter : getFlattenedFilters()) {
+      if (condition.apply(filter)) {
+        return filter;
       }
     }
     return null;
@@ -132,13 +161,22 @@ public class CompositeFilter extends Filter {
 
   @Override
   public String getCanonicalId() {
-    // TODO(orquery): Add special case for flat AND filters.
-
-    List<String> canonicalIds = new ArrayList<>();
-    for (Filter filter : filters) canonicalIds.add(filter.getCanonicalId());
     StringBuilder builder = new StringBuilder();
-    builder.append(isConjunction() ? "and(" : "or(");
-    TextUtils.join(",", canonicalIds);
+
+    // Older SDK versions use an implicit AND operation between their filters. In the new SDK
+    // versions, the developer may use an explicit AND filter. To stay consistent with the old
+    // usages, we add a special case to ensure the canonical ID for these two are the same.
+    // For example: `col.whereEquals("a", 1).whereEquals("b", 2)` should have the same canonical ID
+    // as `col.where(and(equals("a",1), equals("b",2)))`.
+    if (isFlatConjunction()) {
+      for (Filter filter : filters) {
+        builder.append(filter.getCanonicalId());
+      }
+      return builder.toString();
+    }
+
+    builder.append(operator.toString() + "(");
+    builder.append(TextUtils.join(",", filters));
     builder.append(")");
     return builder.toString();
   }
@@ -156,7 +194,6 @@ public class CompositeFilter extends Filter {
     CompositeFilter other = (CompositeFilter) o;
     // Note: This comparison requires order of filters in the list to be the same, and it does not
     // remove duplicate subfilters from each composite filter. It is therefore way less expensive.
-    // TODO(orquery): Consider removing duplicates and ignoring order of filters in the list.
     return operator == other.operator && filters.equals(other.filters);
   }
 

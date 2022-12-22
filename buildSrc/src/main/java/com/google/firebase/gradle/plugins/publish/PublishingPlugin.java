@@ -14,10 +14,8 @@
 
 package com.google.firebase.gradle.plugins.publish;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.firebase.gradle.plugins.FirebaseLibraryExtension;
-import digital.wup.android_maven_publish.AndroidMavenPublishPlugin;
-import java.net.URI;
+import java.io.File;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -26,7 +24,6 @@ import org.gradle.api.Project;
 import org.gradle.api.Task;
 import org.gradle.api.publish.PublishingExtension;
 import org.gradle.api.publish.maven.MavenPublication;
-import org.gradle.api.tasks.bundling.Jar;
 import org.gradle.api.tasks.bundling.Zip;
 
 /**
@@ -110,46 +107,23 @@ public class PublishingPlugin implements Plugin<Project> {
                     if (firebaseLibrary == null) {
                       return;
                     }
-
-                    sub.apply(ImmutableMap.of("plugin", AndroidMavenPublishPlugin.class));
                     PublishingExtension publishing =
                         sub.getExtensions().getByType(PublishingExtension.class);
                     publishing.repositories(
                         repos ->
                             repos.maven(
                                 repo -> {
-                                  repo.setUrl(
-                                      URI.create(
-                                          "file://"
-                                              + sub.getRootProject().getBuildDir()
-                                              + "/m2repository"));
+                                  String s = sub.getRootProject().getBuildDir() + "/m2repository";
+                                  File file = new File(s);
+                                  repo.setUrl(file.toURI());
                                   repo.setName("BuildDir");
                                 }));
                     publishing.publications(
-                        publications ->
-                            publications.create(
-                                "mavenAar",
-                                MavenPublication.class,
-                                publication -> {
-                                  publication.from(
-                                      sub.getComponents()
-                                          .findByName(firebaseLibrary.type.getComponentName()));
-                                  publication.setArtifactId(firebaseLibrary.artifactId.get());
-                                  publication.setGroupId(firebaseLibrary.groupId.get());
-                                  if (firebaseLibrary.publishSources) {
-                                    publication.artifact(
-                                        sub.getTasks()
-                                            .create(
-                                                "sourceJar",
-                                                Jar.class,
-                                                jar -> {
-                                                  jar.from(firebaseLibrary.getSrcDirs());
-                                                  jar.getArchiveClassifier().set("sources");
-                                                }));
-                                  }
-                                  firebaseLibrary.applyPomCustomization(publication.getPom());
-                                  publisher.decorate(firebaseLibrary, publication);
-                                }));
+                        publications -> {
+                          MavenPublication publication =
+                              (MavenPublication) publications.getByName("mavenAar");
+                          publisher.decorate(firebaseLibrary, publication);
+                        });
                     publishAllToLocal.dependsOn(
                         sub.getPath() + ":publishMavenAarPublicationToMavenLocal");
                     publishAllToBuildDir.dependsOn(

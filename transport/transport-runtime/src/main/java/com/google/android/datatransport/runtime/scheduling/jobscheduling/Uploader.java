@@ -17,6 +17,7 @@ package com.google.android.datatransport.runtime.scheduling.jobscheduling;
 import android.content.Context;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import androidx.annotation.RestrictTo;
 import androidx.annotation.VisibleForTesting;
 import com.google.android.datatransport.Encoding;
 import com.google.android.datatransport.runtime.EncodedPayload;
@@ -111,20 +112,21 @@ public class Uploader {
         });
   }
 
-  void logAndUpdateState(TransportContext transportContext, int attemptNumber) {
+  @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+  public BackendResponse logAndUpdateState(TransportContext transportContext, int attemptNumber) {
     TransportBackend backend = backendRegistry.get(transportContext.getBackendName());
     long maxNextRequestWaitMillis = 0;
 
+    BackendResponse response = BackendResponse.ok(maxNextRequestWaitMillis);
     while (guard.runCriticalSection(() -> eventStore.hasPendingEventsFor(transportContext))) {
       Iterable<PersistedEvent> persistedEvents =
           guard.runCriticalSection(() -> eventStore.loadBatch(transportContext));
 
       // Do not make a call to the backend if the list is empty.
       if (!persistedEvents.iterator().hasNext()) {
-        return;
+        return response;
       }
 
-      BackendResponse response;
       if (backend == null) {
         Logging.d(
             LOG_TAG, "Unknown backend for %s, deleting event batch for it...", transportContext);
@@ -157,7 +159,7 @@ public class Uploader {
               return null;
             });
         workScheduler.schedule(transportContext, attemptNumber + 1, true);
-        return;
+        return response;
       } else {
         guard.runCriticalSection(
             () -> {
@@ -202,6 +204,7 @@ public class Uploader {
               transportContext, clock.getTime() + finalMaxNextRequestWaitMillis);
           return null;
         });
+    return response;
   }
 
   @VisibleForTesting

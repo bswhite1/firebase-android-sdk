@@ -93,34 +93,31 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     RateLimiterImpl limiterImpl =
         new RateLimiterImpl(TWO_TOKENS_PER_MINUTE, 2, mClock, mockConfigResolver, NETWORK, false);
     PerfMetric metric = PerfMetric.getDefaultInstance();
-    // clock is 15 seconds, token count is 1.
+    // clock is 30 seconds, count is 2, afterwards is 1
+    currentTime = currentTime.plusSeconds(30);
+    assertThat(limiterImpl.check(metric)).isTrue();
+    // clock is 45 seconds, count is 1.5, afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 30 seconds, count is 1.
+    // clock is 60 seconds, count is 1, afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 45 seconds, count is 0.
-    currentTime = currentTime.plusSeconds(15);
-    assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 60 seconds, count is 1
-    currentTime = currentTime.plusSeconds(15);
-    assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 75 seconds, count is 0,
+    // clock is 75 seconds, count is 0.5, afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isFalse();
-    // clock is 90 seconds, count is 1
+    // clock is 90 seconds, count is 1, afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 105 seconds, count is 0
+    // clock is 105 seconds, count is 0.5, afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isFalse();
-    // clock is 120 seconds, count is 1,
+    // clock is 120 seconds, count is 1, afterwards is 1
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 135 seconds, count is 0,
+    // clock is 135 seconds, count is 0.5, afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isFalse();
-    // clock is 150 seconds, count is 1,
+    // clock is 150 seconds, count is 1, afterwards is 1
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
   }
@@ -136,32 +133,32 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(1.0f);
 
     // allow 2 logs every minute. token bucket capacity is 2.
-    // clock is 0, token count is 2.
+    // clock is 0s, token count is 2.0.
     RateLimiterImpl limiterImpl =
         new RateLimiterImpl(TWO_TOKENS_PER_MINUTE, 2, mClock, mockConfigResolver, NETWORK, false);
     PerfMetric metric = PerfMetric.getDefaultInstance();
-    // clock is 20 seconds, count before check is 2, 0 new tokens added, count after check is 1
+    // clock is 20s, count before check is 2.00, 0.00 new tokens added, count after check is 1.00
     currentTime = currentTime.plusSeconds(20);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 40 seconds, count before check is 1, 1 new tokens added, count after check is 1
-    currentTime = currentTime.plusSeconds(20);
+    // clock is 60s, count before check is 1.00, 1.00 new tokens added, count after check is 1.00
+    currentTime = currentTime.plusSeconds(40);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 59 seconds, count before check is 1, 0 new tokens added, count after check is 0
-    currentTime = currentTime.plusSeconds(19);
+    // clock is 89s, count before check is 1.00, 0.96 new tokens added, count after check is 0.96
+    currentTime = currentTime.plusSeconds(29);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 60 seconds, count before check is 0, 1 new tokens added, count after check is 0
-    currentTime = currentTime.plusSeconds(1);
+    // clock is 95s, count before check is 0.96, 0.20 new tokens added, count after check is 0.16
+    currentTime = currentTime.plusSeconds(6);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 80 seconds, count before check is 0, 0 new tokens added, count after check is 0
-    currentTime = currentTime.plusSeconds(20);
+    // clock is 110s, count before check is 0.16, 0.50 new tokens added, count after check is 0.66
+    currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isFalse();
-    // clock is 130 seconds, count before check is 0, 2 new tokens added, count after check is 1
+    // clock is 160s, count before check is 0.66, 1.34 new tokens added, count after check is 1.00
     currentTime = currentTime.plusSeconds(50);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 131 seconds, count before check is 1, 0 new tokens added, count after check is 0
+    // clock is 161s, count before check is 1.00, 0.03 new tokens added, count after check is 0.03
     currentTime = currentTime.plusSeconds(1);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 132 seconds, count before check is 0, 0 new tokens added, count after check is 0
+    // clock is 162s, count before check is 0.03, 0.03 new tokens added, count after check is 0.06
     currentTime = currentTime.plusSeconds(1);
     assertThat(limiterImpl.check(metric)).isFalse();
   }
@@ -182,29 +179,29 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
         new RateLimiterImpl(TWO_TOKENS_PER_MINUTE, 2, mClock, mockConfigResolver, NETWORK, false);
     PerfMetric metric = PerfMetric.getDefaultInstance();
 
-    // clock is 20 seconds, count before check is 2, 0 new tokens added, count after check is 1
-    currentTime = currentTime.plusSeconds(20);
+    // clock is 0, count before check is 2, 0 new tokens added, count after check is 1
+    currentTime = currentTime.plusSeconds(0);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 40 seconds, count before check is 1, 1 new tokens added, count after check is 1
-    currentTime = currentTime.plusSeconds(20);
+    // clock is 30, count before check is 1, 1 new tokens added, count after check is 1
+    currentTime = currentTime.plusSeconds(30);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 59 seconds, count before check is 1, 0 new tokens added, count after check is 0
-    currentTime = currentTime.plusSeconds(19);
+    // clock is 59, count before check is 1, 0.96 new tokens added, count after check is 0.96
+    currentTime = currentTime.plusSeconds(29);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 60 seconds, count before check is 0, 1 new tokens added, count after check is 0
+    // clock is 60, count before check is 0.96, 0.04 new tokens added, count after check is 0
     currentTime = currentTime.plusSeconds(1);
     assertThat(limiterImpl.check(metric)).isTrue();
 
-    // clock is 660 seconds, count before check is 0, 2 new tokens added, count after check is 1
+    // clock is 660, count before check is 0, 2 new tokens added, count after check is 1
     currentTime = currentTime.plusSeconds(600);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 661 seconds, count before check is 1, 0 new tokens added, count after check is 0
+    // clock is 661, count before check is 1, 0.03 new tokens added, count after check is 0.03
     currentTime = currentTime.plusSeconds(1);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 662 seconds, count before check is 0, 0 new tokens added, count after check is 0
+    // clock is 662, count before check is 0.03, 0.03 new tokens added, count after check is 0.06
     currentTime = currentTime.plusSeconds(1);
     assertThat(limiterImpl.check(metric)).isFalse();
-    // clock is 663 seconds, count before check is 0, 0 new tokens added, count after check is 0
+    // clock is 663, count before check is 0.06, 0.03 new tokens added, count after check is 0.10
     currentTime = currentTime.plusSeconds(1);
     assertThat(limiterImpl.check(metric)).isFalse();
   }
@@ -318,7 +315,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     // clock is 0, token count is 2.
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0, mockConfigResolver);
     PerfMetric metric = PerfMetric.getDefaultInstance();
     // if PerfMetric object has neither TraceMetric or NetworkRequestMetric field set, always return
     // true.
@@ -330,46 +327,46 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
         PerfMetric.newBuilder()
             .setNetworkRequestMetric(NetworkRequestMetric.getDefaultInstance())
             .build();
-    // clock is 15 seconds, token count is 1.
+    // clock is 15 seconds, token count afterwards is 1.
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isFalse();
     assertThat(limiter.isEventRateLimited(network)).isFalse();
-    // clock is 30 seconds, count is 0.
+    // clock is 30 seconds, count afterwards is 0.5.
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isFalse();
     assertThat(limiter.isEventRateLimited(network)).isFalse();
-    // clock is 45 seconds, count is 0.
+    // clock is 45 seconds, count afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isFalse();
     assertThat(limiter.isEventRateLimited(network)).isFalse();
-    // clock is 60 seconds, count is 0
-    currentTime = currentTime.plusSeconds(15);
-    assertThat(limiter.isEventRateLimited(trace)).isFalse();
-    assertThat(limiter.isEventRateLimited(network)).isFalse();
-    // clock is 75 seconds, count is 0,
+    // clock is 60 seconds, count afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isTrue();
     assertThat(limiter.isEventRateLimited(network)).isTrue();
-    // clock is 90 seconds, count is 0
+    // clock is 75 seconds, count afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isFalse();
     assertThat(limiter.isEventRateLimited(network)).isFalse();
-    // clock is 105 seconds, count is 0
+    // clock is 90 seconds, count afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isTrue();
     assertThat(limiter.isEventRateLimited(network)).isTrue();
-    // clock is 120 seconds, count is 0,
+    // clock is 105 seconds, count afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isFalse();
     assertThat(limiter.isEventRateLimited(network)).isFalse();
-    // clock is 135 seconds, count is 0,
+    // clock is 120 seconds, count afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isTrue();
     assertThat(limiter.isEventRateLimited(network)).isTrue();
-    // clock is 150 seconds, count is 0,
+    // clock is 135 seconds, count afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiter.isEventRateLimited(trace)).isFalse();
     assertThat(limiter.isEventRateLimited(network)).isFalse();
+    // clock is 150 seconds, count afterwards is 0.5
+    currentTime = currentTime.plusSeconds(15);
+    assertThat(limiter.isEventRateLimited(trace)).isTrue();
+    assertThat(limiter.isEventRateLimited(network)).isTrue();
   }
 
   @Test
@@ -379,7 +376,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.02f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isTrue();
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isFalse();
@@ -392,10 +389,71 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.5f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isTrue();
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
+  }
+
+  @Test
+  public void testDeviceSampling_tracesEnabledButFragmentDisabled_dropsFragmentTrace() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getTraceSamplingRate()).thenReturn(0.5f);
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.02f);
+
+    RateLimiter limiter =
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, 0.49f, mockConfigResolver);
+
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isFalse();
+    assertThat(limiter.getIsDeviceAllowedToSendTraces()).isTrue();
+
+    // Fragment trace should be dropped
+    PerfMetric fragmentTrace =
+        PerfMetric.newBuilder()
+            .setTraceMetric(
+                TraceMetric.newBuilder()
+                    .setName("_st_TestFragment")
+                    .putCustomAttributes(Constants.ACTIVITY_ATTRIBUTE_KEY, "TestActivity")
+                    .addAllPerfSessions(Arrays.asList(createNonVerbosePerfSessions())))
+            .build();
+    assertThat(limiter.isFragmentScreenTrace(fragmentTrace)).isTrue();
+    assertThat(limiter.isEventSampled(fragmentTrace)).isFalse();
+
+    // Non-fragment trace should be sampled
+    PerfMetric activityTrace =
+        PerfMetric.newBuilder()
+            .setTraceMetric(
+                TraceMetric.newBuilder()
+                    .setName("_st_TestActivity")
+                    .addAllPerfSessions(Arrays.asList(createNonVerbosePerfSessions())))
+            .build();
+    assertThat(limiter.isFragmentScreenTrace(activityTrace)).isFalse();
+    assertThat(limiter.isEventSampled(activityTrace)).isTrue();
+  }
+
+  @Test
+  public void testDeviceSampling_tracesDisabledButFragmentEnabled_dropsFragmentTrace() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getTraceSamplingRate()).thenReturn(0.02f);
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.5f);
+
+    RateLimiter limiter =
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, 0.49f, mockConfigResolver);
+
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isTrue();
+    assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
+
+    // All traces including fragment trace should be dropped
+    PerfMetric trace =
+        PerfMetric.newBuilder()
+            .setTraceMetric(
+                TraceMetric.newBuilder()
+                    .setName("_st_TestFragment")
+                    .putCustomAttributes(Constants.ACTIVITY_ATTRIBUTE_KEY, "TestActivity")
+                    .addAllPerfSessions(Arrays.asList(createNonVerbosePerfSessions())))
+            .build();
+    assertThat(limiter.isFragmentScreenTrace(trace)).isTrue();
+    assertThat(limiter.isEventSampled(trace)).isFalse();
   }
 
   @Test
@@ -404,7 +462,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getTraceSamplingRate()).thenReturn(0.00000001f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000005f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000005f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isTrue();
   }
@@ -415,7 +473,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getTraceSamplingRate()).thenReturn(0.00000001f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000011f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000011f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
   }
@@ -426,7 +484,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.00000001f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000005f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000005f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isTrue();
   }
@@ -437,9 +495,31 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.00000001f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000011f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.000000011f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isFalse();
+  }
+
+  @Test
+  public void getIsDeviceAllowedToSendFragmentScreenTraces_8digitSamplingRate_fragmentIsEnabled() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.00000001f);
+
+    RateLimiter limiter =
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.000000005f, mockConfigResolver);
+
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isTrue();
+  }
+
+  @Test
+  public void getIsDeviceAllowedToSendFragmentScreenTraces_8digitSamplingRate_fragmentIsDisabled() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.00000001f);
+
+    RateLimiter limiter =
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0, 0.000000011f, mockConfigResolver);
+
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isFalse();
   }
 
   @Test
@@ -449,7 +529,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.5f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isTrue();
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isTrue();
@@ -462,10 +542,34 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.5f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.51f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.51f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isFalse();
+  }
+
+  @Test
+  public void testDeviceSampling_bothTracesAndFragmentEnabled_acceptsFragmentTrace() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getTraceSamplingRate()).thenReturn(0.5f);
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.5f);
+
+    RateLimiter limiter =
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.49f, 0.49f, mockConfigResolver);
+
+    assertThat(limiter.getIsDeviceAllowedToSendTraces()).isTrue();
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isTrue();
+
+    PerfMetric trace =
+        PerfMetric.newBuilder()
+            .setTraceMetric(
+                TraceMetric.newBuilder()
+                    .setName("_st_TestFragment")
+                    .putCustomAttributes(Constants.ACTIVITY_ATTRIBUTE_KEY, "TestActivity")
+                    .addAllPerfSessions(Arrays.asList(createNonVerbosePerfSessions())))
+            .build();
+    assertThat(limiter.isFragmentScreenTrace(trace)).isTrue();
+    assertThat(limiter.isEventSampled(trace)).isTrue();
   }
 
   @Test
@@ -474,7 +578,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getTraceSamplingRate()).thenReturn(0.5f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.51f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.51f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
 
@@ -489,13 +593,28 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.5f);
 
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.51f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.51f, 0, mockConfigResolver);
 
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isFalse();
 
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.75f);
 
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isTrue();
+  }
+
+  @Test
+  public void testDeviceSampling_changeInFragmentSamplingRateIsImmediatelyEffective() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.5f);
+
+    RateLimiter limiter =
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0, 0.51f, mockConfigResolver);
+
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isFalse();
+
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.75f);
+
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isTrue();
   }
 
   @Test
@@ -600,16 +719,19 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
     RateLimiterImpl limiterImpl =
         new RateLimiterImpl(TWO_TOKENS_PER_MINUTE, 2, mClock, mockConfigResolver, TRACE, false);
     PerfMetric metric = PerfMetric.getDefaultInstance();
-    // clock is 15 seconds, token count is 1.
+    // clock is 0 seconds, token count is 2, afterwards is 1
+    currentTime = currentTime.plusSeconds(0);
+    assertThat(limiterImpl.check(metric)).isTrue();
+    // clock is 15 seconds, count is 1.5, afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 30 seconds, count is 0.
+    // clock is 30 seconds, count is 1, afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 45 seconds, count is 0.
+    // clock is 45 seconds, count is 0.5, afterwards is 0.5
     currentTime = currentTime.plusSeconds(15);
-    assertThat(limiterImpl.check(metric)).isTrue();
-    // clock is 60 seconds, count is 0
+    assertThat(limiterImpl.check(metric)).isFalse();
+    // clock is 60 seconds, count is 1, afterwards is 0
     currentTime = currentTime.plusSeconds(15);
     assertThat(limiterImpl.check(metric)).isTrue();
 
@@ -671,7 +793,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   public void testBackgroundTraceWithCountersIsNotRateLimitApplicable() {
     makeConfigResolverReturnDefaultValues();
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.99f, mockConfigResolver);
 
     PerfMetric metric =
         PerfMetric.newBuilder()
@@ -688,7 +810,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   public void testBackgroundTraceWithoutCountersIsRateLimitApplicable() {
     makeConfigResolverReturnDefaultValues();
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.99f, mockConfigResolver);
 
     PerfMetric metric =
         PerfMetric.newBuilder()
@@ -704,7 +826,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   public void testForegroundTraceWithCountersIsNotRateLimitApplicable() {
     makeConfigResolverReturnDefaultValues();
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.99f, mockConfigResolver);
 
     PerfMetric metric =
         PerfMetric.newBuilder()
@@ -721,7 +843,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   public void testForegroundTraceWithoutCountersIsRateLimitApplicable() {
     makeConfigResolverReturnDefaultValues();
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.99f, mockConfigResolver);
 
     PerfMetric metric =
         PerfMetric.newBuilder()
@@ -736,7 +858,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   public void testGaugeMetricIsNotRateLimitApplicable() {
     makeConfigResolverReturnDefaultValues();
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.99f, mockConfigResolver);
 
     PerfMetric metric =
         PerfMetric.newBuilder().setGaugeMetric(GaugeMetric.getDefaultInstance()).build();
@@ -748,7 +870,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   public void testTraceMetricNoSpecialNameIsRateLimitApplicable() {
     makeConfigResolverReturnDefaultValues();
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.99f, mockConfigResolver);
 
     PerfMetric metric =
         PerfMetric.newBuilder()
@@ -762,7 +884,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   public void testNetworkRequestMetricIsRateLimitApplicable() {
     makeConfigResolverReturnDefaultValues();
     RateLimiter limiter =
-        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, mockConfigResolver);
+        new RateLimiter(TWO_TOKENS_PER_MINUTE, 2, mClock, 0.99f, 0.99f, mockConfigResolver);
 
     PerfMetric metric =
         PerfMetric.newBuilder()
@@ -785,6 +907,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
             /* capacity= */ 2,
             mClock,
             /* samplingBucketId= */ 0.71f,
+            /* fragmentBucketId= */ 0,
             mockConfigResolver);
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
 
@@ -811,6 +934,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
             /* capacity= */ 2,
             mClock,
             /* samplingBucketId= */ 0.71f,
+            /* fragmentBucketId= */ 0,
             mockConfigResolver);
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isFalse();
 
@@ -822,6 +946,37 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
             .build();
 
     assertThat(limiter.isEventSampled(network)).isTrue();
+  }
+
+  @Test
+  public void isEventSampled_fragmentWithVerboseSessionEnabled_returnsTrue() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getTraceSamplingRate()).thenReturn(1.0f);
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.70f);
+
+    // Passing a value for samplingBucketId which is greater than the sampling rate means that
+    // the sampling dice roll failed causing all the metrics to be dropped
+    RateLimiter limiter =
+        new RateLimiter(
+            /* rate= */ TWO_TOKENS_PER_SECOND,
+            /* capacity= */ 2,
+            mClock,
+            /* samplingBucketId= */ 0,
+            /* fragmentBucketId= */ 0.71f,
+            mockConfigResolver);
+    assertThat(limiter.getIsDeviceAllowedToSendTraces()).isTrue();
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isFalse();
+
+    PerfMetric trace =
+        PerfMetric.newBuilder()
+            .setTraceMetric(
+                TraceMetric.newBuilder()
+                    .setName("_st_TestFragment")
+                    .putCustomAttributes(Constants.ACTIVITY_ATTRIBUTE_KEY, "TestActivity")
+                    .addAllPerfSessions(Arrays.asList(createVerbosePerfSessions())))
+            .build();
+    assertThat(limiter.isFragmentScreenTrace(trace)).isTrue();
+    assertThat(limiter.isEventSampled(trace)).isTrue();
   }
 
   @Test
@@ -837,6 +992,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
             /* capacity= */ 2,
             mClock,
             /* samplingBucketId= */ 0.71f,
+            /* fragmentBucketId= */ 0,
             mockConfigResolver);
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
 
@@ -863,6 +1019,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
             /* capacity= */ 2,
             mClock,
             /* samplingBucketId= */ 0.71f,
+            /* fragmentBucketId= */ 0,
             mockConfigResolver);
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isFalse();
 
@@ -877,10 +1034,42 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
   }
 
   @Test
+  public void isEventSampled_fragmentWithVerboseSessionDisabled_returnsFalse() {
+    makeConfigResolverReturnDefaultValues();
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.70f);
+    when(mockConfigResolver.getTraceSamplingRate()).thenReturn(1.0f);
+
+    // Passing a value for samplingBucketId which is greater than the sampling rate means that
+    // the sampling dice roll failed causing all the metrics to be dropped
+    RateLimiter limiter =
+        new RateLimiter(
+            /* rate= */ TWO_TOKENS_PER_SECOND,
+            /* capacity= */ 2,
+            mClock,
+            /* samplingBucketId= */ 0,
+            /* fragmentBucketId= */ 0.71f,
+            mockConfigResolver);
+    assertThat(limiter.getIsDeviceAllowedToSendTraces()).isTrue();
+    assertThat(limiter.getIsDeviceAllowedToSendFragmentScreenTraces()).isFalse();
+
+    PerfMetric trace =
+        PerfMetric.newBuilder()
+            .setTraceMetric(
+                TraceMetric.newBuilder()
+                    .setName("_st_TestFragment")
+                    .putCustomAttributes(Constants.ACTIVITY_ATTRIBUTE_KEY, "TestActivity")
+                    .addAllPerfSessions(Arrays.asList(createNonVerbosePerfSessions())))
+            .build();
+    assertThat(limiter.isFragmentScreenTrace(trace)).isTrue();
+    assertThat(limiter.isEventSampled(trace)).isFalse();
+  }
+
+  @Test
   public void testGaugesAreNeverSampled() {
     makeConfigResolverReturnDefaultValues();
     when(mockConfigResolver.getTraceSamplingRate()).thenReturn(0.70f);
     when(mockConfigResolver.getNetworkRequestSamplingRate()).thenReturn(0.70f);
+    when(mockConfigResolver.getFragmentSamplingRate()).thenReturn(0.70f);
 
     // Passing a value for samplingBucketId which is greater than the sampling rate ensures that
     // the sampling will be enabled causing all the metrics to be dropped
@@ -890,6 +1079,7 @@ public class RateLimiterTest extends FirebasePerformanceTestBase {
             /* capacity= */ 2,
             mClock,
             /* samplingBucketId= */ 0.71f,
+            /* fragmentBucketId= */ 0.71f,
             mockConfigResolver);
     assertThat(limiter.getIsDeviceAllowedToSendTraces()).isFalse();
     assertThat(limiter.getIsDeviceAllowedToSendNetworkEvents()).isFalse();

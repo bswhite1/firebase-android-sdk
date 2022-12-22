@@ -41,6 +41,8 @@ public final class DefaultAppCheckToken extends AppCheckToken {
   @VisibleForTesting static final String ISSUED_AT_KEY = "iat";
   @VisibleForTesting static final String EXPIRATION_TIME_KEY = "exp";
 
+  private static final long ONE_SECOND_MILLIS = 1000L;
+
   // Raw token value
   private final String token;
   // Timestamp in MS at which this token was generated
@@ -75,14 +77,13 @@ public final class DefaultAppCheckToken extends AppCheckToken {
     } catch (NumberFormatException e) {
       // If parsing the duration string returned by the server fails for any reason, fall back to
       // computing the timeToLive from the token claims directly.
-      Map<String, Object> claimsMap =
-          TokenParser.parseTokenClaims(tokenResponse.getAttestationToken());
+      Map<String, Object> claimsMap = TokenParser.parseTokenClaims(tokenResponse.getToken());
       long iat = getLongFromClaimsSafely(claimsMap, ISSUED_AT_KEY);
       long exp = getLongFromClaimsSafely(claimsMap, EXPIRATION_TIME_KEY);
-      expiresInMillis = exp - iat;
+      expiresInMillis = (exp - iat) * ONE_SECOND_MILLIS;
     }
 
-    return new DefaultAppCheckToken(tokenResponse.getAttestationToken(), expiresInMillis);
+    return new DefaultAppCheckToken(tokenResponse.getToken(), expiresInMillis);
   }
 
   @NonNull
@@ -138,10 +139,10 @@ public final class DefaultAppCheckToken extends AppCheckToken {
     Map<String, Object> claimsMap = TokenParser.parseTokenClaims(token);
     long iat = getLongFromClaimsSafely(claimsMap, ISSUED_AT_KEY);
     long exp = getLongFromClaimsSafely(claimsMap, EXPIRATION_TIME_KEY);
-    long expiresInMillis = exp - iat;
+    long expiresInMillis = (exp - iat) * ONE_SECOND_MILLIS;
     // We use iat for receivedAtTimestamp as an approximation since we have to guess for raw JWTs
     // that we recovered from storage
-    return new DefaultAppCheckToken(token, expiresInMillis, iat);
+    return new DefaultAppCheckToken(token, expiresInMillis, iat * ONE_SECOND_MILLIS);
   }
 
   private static long getLongFromClaimsSafely(

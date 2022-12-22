@@ -71,7 +71,7 @@ final class CctTransportBackend implements TransportBackend {
   private static final String LOG_TAG = "CctTransportBackend";
 
   private static final int CONNECTION_TIME_OUT = 30000;
-  private static final int READ_TIME_OUT = 40000;
+  private static final int READ_TIME_OUT = 130000;
   private static final int INVALID_VERSION_CODE = -1;
   private static final String ACCEPT_ENCODING_HEADER_KEY = "Accept-Encoding";
   private static final String CONTENT_ENCODING_HEADER_KEY = "Content-Encoding";
@@ -283,7 +283,7 @@ final class CctTransportBackend implements TransportBackend {
 
   private HttpResponse doSend(HttpRequest request) throws IOException {
 
-    Logging.d(LOG_TAG, "Making request to: %s", request.url);
+    Logging.i(LOG_TAG, "Making request to: %s", request.url);
     HttpURLConnection connection = (HttpURLConnection) request.url.openConnection();
     connection.setConnectTimeout(CONNECTION_TIME_OUT);
     connection.setReadTimeout(readTimeout);
@@ -315,9 +315,9 @@ final class CctTransportBackend implements TransportBackend {
     }
 
     int responseCode = connection.getResponseCode();
-    Logging.i(LOG_TAG, "Status Code: " + responseCode);
-    Logging.i(LOG_TAG, "Content-Type: " + connection.getHeaderField("Content-Type"));
-    Logging.i(LOG_TAG, "Content-Encoding: " + connection.getHeaderField("Content-Encoding"));
+    Logging.i(LOG_TAG, "Status Code: %d", responseCode);
+    Logging.d(LOG_TAG, "Content-Type: %s", connection.getHeaderField("Content-Type"));
+    Logging.d(LOG_TAG, "Content-Encoding: %s", connection.getHeaderField("Content-Encoding"));
 
     if (responseCode == 302 || responseCode == 301 || responseCode == 307) {
       String redirect = connection.getHeaderField("Location");

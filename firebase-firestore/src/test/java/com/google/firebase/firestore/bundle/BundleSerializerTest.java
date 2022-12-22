@@ -20,6 +20,7 @@ import static com.google.firebase.firestore.testutil.TestUtil.key;
 import static com.google.firebase.firestore.testutil.TestUtil.orderBy;
 import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertThrows;
 
 import com.google.firebase.firestore.core.Query;
 import com.google.firebase.firestore.core.Target;
@@ -596,32 +597,32 @@ public class BundleSerializerTest {
     assertDecodesNamedQuery(json, query);
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testDoesNotDecodeOffset() throws JSONException {
     String json = "{ from: [ { collectionId: 'coll' } ], offset: 5 }";
     Query query = TestUtil.query("coll");
-    assertDecodesNamedQuery(json, query);
+    assertThrows(IllegalArgumentException.class, () -> assertDecodesNamedQuery(json, query));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testDoesNotDecodeSelect() throws JSONException {
     String json = "{ from: [ { collectionId: 'coll' } ], select: [] }";
     Query query = TestUtil.query("coll");
-    assertDecodesNamedQuery(json, query);
+    assertThrows(IllegalArgumentException.class, () -> assertDecodesNamedQuery(json, query));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testDoesNotDecodeMissingCollection() throws JSONException {
     String json = "{ from: [ ] }";
     Query query = TestUtil.query("coll");
-    assertDecodesNamedQuery(json, query);
+    assertThrows(IllegalArgumentException.class, () -> assertDecodesNamedQuery(json, query));
   }
 
-  @Test(expected = IllegalArgumentException.class)
+  @Test
   public void testDoesNotDecodeMultipleCollections() throws JSONException {
     String json = "{ from: [ { collectionId: 'c1' }, { collectionId: 'c2' } ] }";
     Query query = TestUtil.query("coll");
-    assertDecodesNamedQuery(json, query);
+    assertThrows(IllegalArgumentException.class, () -> assertDecodesNamedQuery(json, query));
   }
 
   // BundleMetadata tests
@@ -711,30 +712,26 @@ public class BundleSerializerTest {
             + json
             + ",\n"
             + "    limitType: '"
-            + (query.hasLimitToLast() ? "LAST" : "FIRST")
+            + (query.getLimitType().equals(Query.LimitType.LIMIT_TO_LAST) ? "LAST" : "FIRST")
             + "'\n"
             + "   },\n"
             + " readTime: '2020-01-01T00:00:01.000000001Z'\n"
             + "}";
     NamedQuery actualNamedQuery = serializer.decodeNamedQuery(new JSONObject(queryJson));
 
-    long limit =
-        query.hasLimitToFirst()
-            ? query.getLimitToFirst()
-            : (query.hasLimitToLast() ? query.getLimitToLast() : Target.NO_LIMIT);
     Target target =
         new Target(
             query.getPath(),
             query.getCollectionGroup(),
             query.getFilters(),
             query.getExplicitOrderBy(),
-            limit,
+            query.getLimit(),
             query.getStartAt(),
             query.getEndAt());
     BundledQuery bundledQuery =
         new BundledQuery(
             target,
-            query.hasLimitToLast()
+            query.getLimitType().equals(Query.LimitType.LIMIT_TO_LAST)
                 ? Query.LimitType.LIMIT_TO_LAST
                 : Query.LimitType.LIMIT_TO_FIRST);
     NamedQuery expectedNamedQuery =
