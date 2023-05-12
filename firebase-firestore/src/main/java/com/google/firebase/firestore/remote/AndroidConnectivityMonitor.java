@@ -107,6 +107,7 @@ public final class AndroidConnectivityMonitor implements ConnectivityMonitor {
         new Application.ActivityLifecycleCallbacks() {
           @Override
           public void onActivityCreated(@NonNull Activity activity, Bundle savedInstanceState) {
+            Logger.debug("Ben_Background", "AndroidConnectivityMonitor has entered onActivityCreated.");
             if (inBackground.compareAndSet(true, false)) {
               raiseForegroundNotification();
             }
@@ -114,6 +115,7 @@ public final class AndroidConnectivityMonitor implements ConnectivityMonitor {
 
           @Override
           public void onActivityStarted(@NonNull Activity activity) {
+            Logger.debug("Ben_Background", "AndroidConnectivityMonitor has entered onActivityStarted.");
             if (inBackground.compareAndSet(true, false)) {
               raiseForegroundNotification();
             }
@@ -121,30 +123,42 @@ public final class AndroidConnectivityMonitor implements ConnectivityMonitor {
 
           @Override
           public void onActivityResumed(@NonNull Activity activity) {
+            Logger.debug("Ben_Background", "AndroidConnectivityMonitor has entered onActivityResumed.");
             if (inBackground.compareAndSet(true, false)) {
               raiseForegroundNotification();
             }
           }
 
           @Override
-          public void onActivityPaused(@NonNull Activity activity) {}
+          public void onActivityPaused(@NonNull Activity activity) {
+            Logger.debug("Ben_Background", "AndroidConnectivityMonitor has entered onActivityPaused.");
+          }
 
           @Override
-          public void onActivityStopped(@NonNull Activity activity) {}
+          public void onActivityStopped(@NonNull Activity activity) {
+            Logger.debug("Ben_Background", "AndroidConnectivityMonitor has entered onActivityStopped.");
+          }
 
           @Override
           public void onActivitySaveInstanceState(
-              @NonNull Activity activity, @NonNull Bundle outState) {}
+              @NonNull Activity activity, @NonNull Bundle outState) {
+                Logger.debug("Ben_Background", "AndroidConnectivityMonitor has entered onActivitySaveInstanceState.");
+              }
 
           @Override
-          public void onActivityDestroyed(@NonNull Activity activity) {}
+          public void onActivityDestroyed(@NonNull Activity activity) {
+            Logger.debug("Ben_Background", "AndroidConnectivityMonitor has entered onActivityDestroyed.");
+          }
         });
 
     application.registerComponentCallbacks(
         new ComponentCallbacks2() {
           @Override
           public void onTrimMemory(int level) {
+            Logger.debug("Ben_Background", "onTrimMemory level: %d", level);
+
             if (level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
+              Logger.debug("Ben_Background", "App has entered the background.");
               inBackground.set(true);
             }
           }

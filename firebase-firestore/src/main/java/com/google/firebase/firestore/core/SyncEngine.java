@@ -237,6 +237,7 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     // and here to call that.
     View view = new View(query, queryResult.getRemoteKeys());
     View.DocumentChanges viewDocChanges = view.computeDocChanges(queryResult.getDocuments());
+    Logger.debug("Ben_Limbo", "initializeViewAndComputeSnapshot calling applyChanges");
     ViewChange viewChange = view.applyChanges(viewDocChanges, synthesizedCurrentChange);
     updateTrackedLimboDocuments(viewChange.getLimboChanges(), targetId);
 
@@ -652,6 +653,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       }
       TargetChange targetChange =
           remoteEvent == null ? null : remoteEvent.getTargetChanges().get(queryView.getTargetId());
+
+          Logger.debug("Ben_Limbo", "emitNewSnapsAndNotifyLocalStore calling applyChanges");
       ViewChange viewChange = queryView.getView().applyChanges(viewDocChanges, targetChange);
       updateTrackedLimboDocuments(viewChange.getLimboChanges(), queryView.getTargetId());
 

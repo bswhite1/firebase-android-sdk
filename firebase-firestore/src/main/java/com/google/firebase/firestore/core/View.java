@@ -32,6 +32,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import com.google.firebase.firestore.util.Logger;
 
 /**
  * View is responsible for computing the final merged truth of what docs are in a query. It gets
@@ -199,6 +200,8 @@ public class View {
         changeSet.addChange(DocumentViewChange.create(Type.ADDED, newDoc));
         changeApplied = true;
       } else if (oldDoc != null && newDoc == null) {
+        // Ben 
+        Logger.debug("Ben_Limbo", "computeDocChanges removing doc: %s", oldDoc);
         changeSet.addChange(DocumentViewChange.create(Type.REMOVED, oldDoc));
         changeApplied = true;
         if (lastDocInLimit != null || firstDocInLimit != null) {
@@ -232,6 +235,7 @@ public class View {
                 : newDocumentSet.getFirstDocument();
         newDocumentSet = newDocumentSet.remove(oldDoc.getKey());
         newMutatedKeys = newMutatedKeys.remove(oldDoc.getKey());
+        Logger.debug("Ben_Limbo", "computeDocChanges has limit removing doc: %s", oldDoc);
         changeSet.addChange(DocumentViewChange.create(Type.REMOVED, oldDoc));
       }
     }
@@ -330,6 +334,8 @@ public class View {
       // syncState and generate a ViewChange as appropriate. We are guaranteed to get a new
       // TargetChange that sets `current` back to true once the client is back online.
       this.current = false;
+
+      Logger.debug("Ben_Limbo", "applyOnlineStateChange calling applyChanges");
       return applyChanges(
           new DocumentChanges(
               documentSet, new DocumentViewChangeSet(), mutatedKeys, /*needsRefill=*/ false));
@@ -342,6 +348,7 @@ public class View {
   private void applyTargetChange(TargetChange targetChange) {
     if (targetChange != null) {
       for (DocumentKey documentKey : targetChange.getAddedDocuments()) {
+        Logger.debug("Ben_Limbo", "applyTargetChange adding %s to syncedDocuments", documentKey);
         syncedDocuments = syncedDocuments.insert(documentKey);
       }
       for (DocumentKey documentKey : targetChange.getModifiedDocuments()) {
@@ -352,6 +359,7 @@ public class View {
       }
       for (DocumentKey documentKey : targetChange.getRemovedDocuments()) {
         syncedDocuments = syncedDocuments.remove(documentKey);
+        Logger.debug("Ben_Limbo", "applyTargetChange removing %s from syncedDocuments", documentKey);
       }
       current = targetChange.isCurrent();
     }

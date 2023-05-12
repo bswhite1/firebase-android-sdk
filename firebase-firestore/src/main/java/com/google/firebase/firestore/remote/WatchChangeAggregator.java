@@ -37,6 +37,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.google.firebase.firestore.util.Logger;
 
 /** A helper class to accumulate watch changes into a RemoteEvent and other target information. */
 public class WatchChangeAggregator {
@@ -142,6 +143,9 @@ public class WatchChangeAggregator {
             // Reset the target and synthesizes removes for all existing documents. The backend will
             // re-add any documents that still match the target before it sends the next global
             // snapshot.
+
+            Logger.debug("Ben_Limbo", "handleTargetChange resetTarget targetId: %d", targetId);
+
             resetTarget(targetId);
             targetState.updateResumeToken(targetChange.getResumeToken());
           }
@@ -200,6 +204,8 @@ public class WatchChangeAggregator {
         if (currentSize != expectedCount) {
           // Existence filter mismatch: We reset the mapping and raise a new snapshot with
           // `isFromCache:true`.
+          Logger.debug("Ben_Limbo", "handleExistenceFilter resetTarget targetId: %d. currentSize: %d expectedCount: %d", targetId, currentSize, expectedCount);
+
           resetTarget(targetId);
           pendingTargetResets.add(targetId);
 
@@ -325,10 +331,12 @@ public class WatchChangeAggregator {
 
     TargetState targetState = ensureTargetState(targetId);
     if (targetContainsDocument(targetId, key)) {
+      Logger.debug("Ben_Limbo", "removeDocumentFromTarget 1 removing doc: %s", key);
       targetState.addDocumentChange(key, DocumentViewChange.Type.REMOVED);
     } else {
       // The document may have entered and left the target before we raised a snapshot, so we can
       // just ignore the change.
+      Logger.debug("Ben_Limbo", "removeDocumentFromTarget 2 removing doc: %s", key);
       targetState.removeDocumentChange(key);
     }
 
@@ -351,6 +359,12 @@ public class WatchChangeAggregator {
   private int getCurrentDocumentCountForTarget(int targetId) {
     TargetState targetState = ensureTargetState(targetId);
     TargetChange targetChange = targetState.toTargetChange();
+
+    Logger.debug("Ben_Limbo", "getCurrentDocumentCountForTarget. Size: %d, added: %d, removed: %d",
+       targetMetadataProvider.getRemoteKeysForTarget(targetId).size(),
+       targetChange.getAddedDocuments().size(),
+       targetChange.getRemovedDocuments().size());
+
     return (targetMetadataProvider.getRemoteKeysForTarget(targetId).size()
         + targetChange.getAddedDocuments().size()
         - targetChange.getRemovedDocuments().size());
@@ -416,6 +430,9 @@ public class WatchChangeAggregator {
         targetStates.get(targetId) != null && !targetStates.get(targetId).isPending(),
         "Should only reset active targets");
     targetStates.put(targetId, new TargetState());
+
+    //ben
+    Logger.debug("Ben_Limbo", "WatchChangeAggregator resetTarget targetId: %d", targetId);
 
     // Trigger removal for any documents currently mapped to this target. These removals will be
     // part of the initial snapshot if Watch does not resend these documents.

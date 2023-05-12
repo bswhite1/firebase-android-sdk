@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import android.util.Log;
 
 /**
  * A {@code QuerySnapshot} contains the results of a query. <br>
@@ -111,6 +112,8 @@ public class QuerySnapshot implements Iterable<QueryDocumentSnapshot> {
    */
   @NonNull
   public List<DocumentChange> getDocumentChanges(@NonNull MetadataChanges metadataChanges) {
+    Log.d("Ben_snapshot", "QuerySnapshot. getDocumentChanges enter");
+
     if (MetadataChanges.INCLUDE.equals(metadataChanges) && snapshot.excludesMetadataChanges()) {
       throw new IllegalArgumentException(
           "To include metadata changes with your document changes, you must also pass MetadataChanges.INCLUDE to addSnapshotListener().");
@@ -122,6 +125,8 @@ public class QuerySnapshot implements Iterable<QueryDocumentSnapshot> {
               DocumentChange.changesFromSnapshot(firestore, metadataChanges, snapshot));
       cachedChangesMetadataState = metadataChanges;
     }
+
+    Log.d("Ben_snapshot", "QuerySnapshot. getDocumentChanges exit");
     return cachedChanges;
   }
 

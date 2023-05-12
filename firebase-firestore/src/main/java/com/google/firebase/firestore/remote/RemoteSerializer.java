@@ -86,6 +86,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import com.google.firebase.firestore.util.Logger;
 
 /** Serializer that converts to and from Firestore API protos. */
 public final class RemoteSerializer {
@@ -976,6 +977,8 @@ public final class RemoteSerializer {
       case FILTER:
         com.google.firestore.v1.ExistenceFilter protoFilter = protoChange.getFilter();
         // TODO: implement existence filter parsing (see b/33076578)
+        //Ben
+        Logger.debug("Ben_Limbo", "decodeWatchChange FILTER count: %d", protoFilter.getCount());
         ExistenceFilter filter = new ExistenceFilter(protoFilter.getCount());
         int targetId = protoFilter.getTargetId();
         watchChange = new ExistenceFilterWatchChange(targetId, filter);

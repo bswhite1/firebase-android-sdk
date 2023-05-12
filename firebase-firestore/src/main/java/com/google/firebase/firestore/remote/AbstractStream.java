@@ -110,11 +110,11 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
       dispatcher.run(
           () -> {
             if (Logger.isDebugEnabled()) {
-              Logger.debug(
-                  AbstractStream.this.getClass().getSimpleName(),
-                  "(%x) Stream received: %s",
-                  System.identityHashCode(AbstractStream.this),
-                  response);
+              // Logger.debug(
+              //     AbstractStream.this.getClass().getSimpleName(),
+              //     "(%x) Stream received: %s",
+              //     System.identityHashCode(AbstractStream.this),
+              //     response);
             }
             AbstractStream.this.onNext(response);
           });
