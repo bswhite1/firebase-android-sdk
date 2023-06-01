@@ -215,7 +215,11 @@ public final class SQLitePersistence extends Persistence {
       // Note that an exception in operation.run() will prevent this code from running.
       Logger.debug(TAG, "Starting setTransactionSuccessful 1: %s", action);
       db.setTransactionSuccessful();
-    } finally {
+    } 
+    catch (Exception e) {
+      Logger.debug(TAG, "exception in transaction 1:\n" + e);
+     }
+     finally {
       Logger.debug(TAG, "Starting endTransaction 1: %s", action);
       db.endTransaction();
     }
@@ -228,12 +232,17 @@ public final class SQLitePersistence extends Persistence {
     T value = null;
     db.beginTransactionWithListener(transactionListener);
     try {
+      Logger.debug(TAG, "Starting transaction 2 calling operation.get");
       value = operation.get();
 
-      Logger.debug(TAG, "Starting setTransactionSuccessful 2: %s", action);
+      Logger.debug(TAG, "Starting operation.get returned, success: %s", action);
       // Note that an exception in operation.run() will prevent this code from running.
       db.setTransactionSuccessful();
-    } finally {
+    } 
+   catch (Exception e) {
+    Logger.debug(TAG, "exception in transaction 2:\n" + e);
+   }
+    finally {
       Logger.debug(TAG, "Starting endTransaction 2: %s", action);
       db.endTransaction();
     }

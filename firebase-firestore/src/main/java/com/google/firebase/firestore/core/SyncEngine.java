@@ -335,6 +335,9 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     // Update `receivedDocument` as appropriate for any limbo targets.
     for (Map.Entry<Integer, TargetChange> entry : event.getTargetChanges().entrySet()) {
       Integer targetId = entry.getKey();
+
+      // Logger.debug("Ben_Reset", "SyncEngine handleRemoteEvent for targetID: %d", targetId);
+
       TargetChange targetChange = entry.getValue();
       LimboResolution limboResolution = activeLimboResolutionsByTarget.get(targetId);
       if (limboResolution != null) {
@@ -361,6 +364,14 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
           // This was probably just a CURRENT targetChange or similar.
         }
       }
+    }
+
+    // Ben
+    for (Map.Entry<Integer, QueryPurpose> entry : event.getTargetMismatches().entrySet()) {
+      int targetId = entry.getKey();
+
+      //Ben
+      // Logger.debug("Ben_Reset", "SyncEngine handleRemoteEvent Could handle resetting targetID: %d", targetId);
     }
 
     ImmutableSortedMap<DocumentKey, Document> changes = localStore.applyRemoteEvent(event);
@@ -416,6 +427,9 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       // Since this query failed, we won't want to manually unlisten to it.
       // So go ahead and remove it from bookkeeping.
       activeLimboTargetsByKey.remove(limboKey);
+
+      // Logger.debug("Ben_Reset", "handleRejectedListen activeLimboTargetsByKey: %d, key: %s", activeLimboTargetsByKey.size(), limboKey);
+
       activeLimboResolutionsByTarget.remove(targetId);
       pumpEnqueuedLimboResolutions();
 
@@ -626,6 +640,9 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
     if (targetId != null) {
       remoteStore.stopListening(targetId);
       activeLimboTargetsByKey.remove(key);
+
+      // Logger.debug("Ben_Reset", "removeLimboTarget activeLimboTargetsByKey: %d, key: %s", activeLimboTargetsByKey.size(), key);
+
       activeLimboResolutionsByTarget.remove(targetId);
       pumpEnqueuedLimboResolutions();
     }
@@ -655,7 +672,22 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
       TargetChange targetChange =
           remoteEvent == null ? null : remoteEvent.getTargetChanges().get(queryView.getTargetId());
 
-          Logger.debug("Ben_Limbo", "emitNewSnapsAndNotifyLocalStore calling applyChanges");
+          // Logger.debug("Ben_Limbo", "emitNewSnapsAndNotifyLocalStore calling applyChanges");
+
+          // Ben
+
+      if (remoteEvent != null) {
+        for (Map.Entry<Integer, QueryPurpose> mismatchEntry : remoteEvent.getTargetMismatches().entrySet()) {
+          int targetId = mismatchEntry.getKey();
+
+          //Ben
+          Logger.debug("Ben_Reset", "SyncEngine emitNewSnapsAndNotifyLocalStore event targetID: %d, queryView.getTargetId: %d", targetId, queryView.getTargetId());
+
+          queryView.getView().resetPending();
+        }
+      }
+
+
       ViewChange viewChange = queryView.getView().applyChanges(viewDocChanges, targetChange);
       updateTrackedLimboDocuments(viewChange.getLimboChanges(), queryView.getTargetId());
 
@@ -665,6 +697,8 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
             LocalViewChanges.fromViewSnapshot(queryView.getTargetId(), viewChange.getSnapshot());
         documentChangesInAllViews.add(docChanges);
       }
+
+      
     }
     syncEngineListener.onViewSnapshots(newSnapshots);
     localStore.notifyLocalViewChanges(documentChangesInAllViews);
@@ -691,12 +725,18 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
           throw fail("Unknown limbo change type: %s", limboChange.getType());
       }
     }
+
+    ImmutableSortedSet<DocumentKey> limboKeys = limboDocumentRefs.referencesForId(targetId);
+    // for (DocumentKey key : limboKeys) {
+    
+    // Logger.debug("Ben_Reset", "updateTrackedLimboDocuments limboKeys: %d", limboKeys.size());
+
   }
 
   private void trackLimboChange(LimboDocumentChange change) {
     DocumentKey key = change.getKey();
     if (!activeLimboTargetsByKey.containsKey(key) && !enqueuedLimboResolutions.contains(key)) {
-      Logger.debug(TAG, "New document in limbo: %s", key);
+      Logger.debug(TAG, "New document in limbo: %s added to enqueuedLimboResolutions", key);
       enqueuedLimboResolutions.add(key);
       pumpEnqueuedLimboResolutions();
     }
@@ -711,14 +751,30 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
    * https://github.com/firebase/firebase-js-sdk/issues/2683.
    */
   private void pumpEnqueuedLimboResolutions() {
+    // Logger.debug("Ben_Reset", "pumpEnqueuedLimboResolutions enter");
+
     while (!enqueuedLimboResolutions.isEmpty()
         && activeLimboTargetsByKey.size() < maxConcurrentLimboResolutions) {
+
+          
+
       Iterator<DocumentKey> it = enqueuedLimboResolutions.iterator();
       DocumentKey key = it.next();
+
+      // Logger.debug("Ben_Reset", "pumpEnqueuedLimboResolutions enqueuedLimboResolutions.size(): %d, activeLimboTargetsByKey.size(): %d",
+      //    enqueuedLimboResolutions.size(), activeLimboTargetsByKey.size());
+
       it.remove();
+
+      
       int limboTargetId = targetIdGenerator.nextId();
+
+      // Logger.debug("Ben_Reset", "SyncEngine pumpEnqueuedLimboResolutions adding activeLimboResolutionsByTarget key: %s", key.getPath());
       activeLimboResolutionsByTarget.put(limboTargetId, new LimboResolution(key));
       activeLimboTargetsByKey.put(key, limboTargetId);
+
+      // Logger.debug("Ben_Reset", "pumpEnqueuedLimboResolutions activeLimboTargetsByKey: %d, key: %s", activeLimboTargetsByKey.size(), key);
+
       remoteStore.listen(
           new TargetData(
               Query.atPath(key.getPath()).toTarget(),
@@ -726,6 +782,7 @@ public class SyncEngine implements RemoteStore.RemoteStoreCallback {
               ListenSequence.INVALID,
               QueryPurpose.LIMBO_RESOLUTION));
     }
+    // Logger.debug("Ben_Reset", "pumpEnqueuedLimboResolutions exit");
   }
 
   @VisibleForTesting

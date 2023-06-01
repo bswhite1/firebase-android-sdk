@@ -112,7 +112,7 @@ public class QuerySnapshot implements Iterable<QueryDocumentSnapshot> {
    */
   @NonNull
   public List<DocumentChange> getDocumentChanges(@NonNull MetadataChanges metadataChanges) {
-    Log.d("Ben_snapshot", "QuerySnapshot. getDocumentChanges enter");
+    // Log.d("Ben_snapshot", "QuerySnapshot. getDocumentChanges enter");
 
     if (MetadataChanges.INCLUDE.equals(metadataChanges) && snapshot.excludesMetadataChanges()) {
       throw new IllegalArgumentException(
@@ -126,7 +126,7 @@ public class QuerySnapshot implements Iterable<QueryDocumentSnapshot> {
       cachedChangesMetadataState = metadataChanges;
     }
 
-    Log.d("Ben_snapshot", "QuerySnapshot. getDocumentChanges exit");
+    // Log.d("Ben_snapshot", "QuerySnapshot. getDocumentChanges exit");
     return cachedChanges;
   }
 

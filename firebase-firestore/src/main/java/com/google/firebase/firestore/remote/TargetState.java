@@ -105,7 +105,7 @@ final class TargetState {
           break;
         case REMOVED:
         //Ben
-        Logger.debug("Ben_Limbo", "toTargetChange removing %s from syncedDocuments", key);
+        // Logger.debug("Ben_Reset", "TargetState toTargetChange removing %s from syncedDocuments", key);
           removedDocuments = removedDocuments.insert(key);
           break;
         default:

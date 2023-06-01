@@ -1001,7 +1001,7 @@ public final class RemoteSerializer {
       case FILTER:
         com.google.firestore.v1.ExistenceFilter protoFilter = protoChange.getFilter();
 
-        Logger.debug("Ben_Limbo", "decodeWatchChange FILTER count: %d", protoFilter.getCount());
+        // Logger.debug("Ben_Limbo", "decodeWatchChange FILTER count: %d", protoFilter.getCount());
         // Ben, can we get count for unchanged names?
         
         ExistenceFilter filter =

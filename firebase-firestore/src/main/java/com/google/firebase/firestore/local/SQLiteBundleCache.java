@@ -23,6 +23,7 @@ import com.google.firebase.firestore.bundle.NamedQuery;
 import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firestore.bundle.BundledQuery;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.firebase.firestore.util.Logger;
 
 class SQLiteBundleCache implements BundleCache {
   private final SQLitePersistence db;
@@ -54,6 +55,8 @@ class SQLiteBundleCache implements BundleCache {
 
   @Override
   public void saveBundleMetadata(BundleMetadata metadata) {
+    // Logger.debug("Ben_memory", "SQLiteBundleCache INSERT OR REPLACE INTO bundles. BundleId: %s", metadata.getBundleId());
+
     db.execute(
         "INSERT OR REPLACE INTO bundles "
             + "(bundle_id, schema_version, create_time_seconds, create_time_nanos, "
@@ -94,7 +97,7 @@ class SQLiteBundleCache implements BundleCache {
   @Override
   public void saveNamedQuery(NamedQuery query) {
     BundledQuery bundledQuery = serializer.encodeBundledQuery(query.getBundledQuery());
-
+    // Logger.debug("Ben_memory", "SQLiteBundleCache INSERT OR REPLACE INTO named_queries. name: %s", query.getName());
     db.execute(
         "INSERT OR REPLACE INTO named_queries "
             + "(name, read_time_seconds, read_time_nanos, bundled_query_proto) "

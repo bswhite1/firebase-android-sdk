@@ -15,6 +15,7 @@
 package com.google.firebase.firestore;
 
 import static com.google.firebase.firestore.util.Assert.hardAssert;
+import com.google.firebase.firestore.util.Logger;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,6 +24,7 @@ import com.google.firebase.firestore.core.DocumentViewChange;
 import com.google.firebase.firestore.core.ViewSnapshot;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentSet;
+
 import java.util.ArrayList;
 import java.util.List;
 import android.util.Log;
@@ -127,7 +129,7 @@ public class DocumentChange {
   /** Creates the list of document changes from a {@code ViewSnapshot}. */
   static List<DocumentChange> changesFromSnapshot(
       FirebaseFirestore firestore, MetadataChanges metadataChanges, ViewSnapshot snapshot) {
-        Log.d("Ben_snapshot", "DocumentChange. changesFromSnapshot enter");
+        // Log.d("Ben_snapshot", "DocumentChange. changesFromSnapshot enter");
     List<DocumentChange> documentChanges = new ArrayList<>();
     if (snapshot.getOldDocuments().isEmpty()) {
       // Special case the first snapshot because index calculation is easy and fast. Also all
@@ -184,10 +186,11 @@ public class DocumentChange {
         } else {
           newIndex = -1;
         }
+        // Logger.debug("Ben_Reset", "DocumentChange changesFromSnapshot doing something to doc: %s", document.getKey());
         documentChanges.add(new DocumentChange(documentSnapshot, type, oldIndex, newIndex));
       }
     }
-    Log.d("Ben_snapshot", "DocumentChange. changesFromSnapshot exit");
+    // Log.d("Ben_snapshot", "DocumentChange. changesFromSnapshot exit");
     return documentChanges;
   }
 

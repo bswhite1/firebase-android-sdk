@@ -27,6 +27,7 @@ import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.util.Consumer;
 import com.google.protobuf.InvalidProtocolBufferException;
+import com.google.firebase.firestore.util.Logger;
 
 /** Cached Queries backed by SQLite. */
 final class SQLiteTargetCache implements TargetCache {
@@ -95,12 +96,16 @@ final class SQLiteTargetCache implements TargetCache {
   }
 
   private void saveTargetData(TargetData targetData) {
+    // Logger.debug("Ben_Memory", "SQLiteTargetCache saveTargetData enter. targetId: %d", targetData.getTargetId());
+
     int targetId = targetData.getTargetId();
     String canonicalId = targetData.getTarget().getCanonicalId();
     Timestamp version = targetData.getSnapshotVersion().getTimestamp();
 
     com.google.firebase.firestore.proto.Target targetProto =
         localSerializer.encodeTargetData(targetData);
+
+        // Logger.debug("Ben_memory", "SQLiteTargetCache INSERT OR REPLACE INTO targets. targetId: %d", targetId);
 
     db.execute(
         "INSERT OR REPLACE INTO targets ("
@@ -119,6 +124,8 @@ final class SQLiteTargetCache implements TargetCache {
         targetData.getResumeToken().toByteArray(),
         targetData.getSequenceNumber(),
         targetProto.toByteArray());
+
+        // Logger.debug("Ben_Memory", "SQLiteTargetCache saveTargetData exit.");
   }
 
   private boolean updateMetadata(TargetData targetData) {
@@ -254,14 +261,27 @@ final class SQLiteTargetCache implements TargetCache {
     // because there's no additional information in the row. If we want to track additional data
     // this will probably need to become INSERT OR REPLACE instead.
     SQLiteStatement inserter =
-        db.prepare("INSERT OR IGNORE INTO target_documents (target_id, path) VALUES (?, ?)");
+        db.prepare("INSERT OR REPLACE INTO target_documents (target_id, path) VALUES (?, ?)");
 
     ReferenceDelegate delegate = db.getReferenceDelegate();
     for (DocumentKey key : keys) {
       String path = EncodedPath.encode(key.getPath());
+      // Logger.debug("Ben_memory", "SQLiteTargetCache INSERT OR REPLACE INTO target_documents. targetId: %d path: %s", targetId, path);
       db.execute(inserter, targetId, path);
-      delegate.addReference(key);
+      // delegate.addReference(key);
     }
+
+    long documentCount =
+       db.query("SELECT COUNT(*) FROM target_documents")
+            .firstValue(row -> row.getLong(0));
+
+    long targetDocumentCount =
+        db.query("SELECT COUNT(*) FROM target_documents WHERE target_id = ?")
+            .binding(targetId)
+            .firstValue(row -> row.getLong(0));
+
+    // Logger.debug("Ben_memory", "SQLiteTargetCache targetId: %d, count: %d, totalDocs: %d", targetId, targetDocumentCount, documentCount);
+
   }
 
   @Override

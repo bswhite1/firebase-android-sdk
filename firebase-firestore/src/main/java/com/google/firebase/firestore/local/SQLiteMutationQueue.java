@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.google.firebase.firestore.util.Logger;
 
 /** A mutation queue for a specific user, backed by SQLite. */
 final class SQLiteMutationQueue implements MutationQueue {
@@ -175,6 +176,7 @@ final class SQLiteMutationQueue implements MutationQueue {
   }
 
   private void writeMutationQueueMetadata() {
+    // Logger.debug("Ben_memory", "SQLiteMutationQueue INSERT OR REPLACE INTO mutation_queues. uid: %s", uid);
     db.execute(
         "INSERT OR REPLACE INTO mutation_queues "
             + "(uid, last_acknowledged_batch_id, last_stream_token) "
@@ -193,6 +195,7 @@ final class SQLiteMutationQueue implements MutationQueue {
     MutationBatch batch = new MutationBatch(batchId, localWriteTime, baseMutations, mutations);
     MessageLite proto = serializer.encodeMutationBatch(batch);
 
+    // Logger.debug("Ben_memory", "SQLiteMutationQueue INSERT INTO mutations. uid: %s", uid);
     db.execute(
         "INSERT INTO mutations (uid, batch_id, mutations) VALUES (?, ?, ?)",
         uid,
@@ -213,6 +216,8 @@ final class SQLiteMutationQueue implements MutationQueue {
       }
 
       String path = EncodedPath.encode(key.getPath());
+
+      // Logger.debug("Ben_memory", "SQLiteMutationQueue INSERT INTO document_mutations. path: %s", path);
       db.execute(indexInserter, uid, path, batchId);
 
       indexManager.addToCollectionParentIndex(key.getCollectionPath());
