@@ -110,11 +110,11 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
       dispatcher.run(
           () -> {
             if (Logger.isDebugEnabled()) {
-              Logger.debug(
-                  AbstractStream.this.getClass().getSimpleName(),
-                  "(%x) Stream received: %s",
-                  System.identityHashCode(AbstractStream.this),
-                  response);
+              //              Logger.debug(
+              //                  AbstractStream.this.getClass().getSimpleName(),
+              //                  "(%x) Stream received: %s",
+              //                  System.identityHashCode(AbstractStream.this),
+              //                  response);
             }
             AbstractStream.this.onNext(response);
           });
@@ -380,11 +380,11 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
 
   protected void writeRequest(ReqT message) {
     workerQueue.verifyIsCurrentThread();
-    Logger.debug(
-        getClass().getSimpleName(),
-        "(%x) Stream sending: %s",
-        System.identityHashCode(this),
-        message);
+    //    Logger.debug(
+    //        getClass().getSimpleName(),
+    //        "(%x) Stream sending: %s",
+    //        System.identityHashCode(this),
+    //        message);
     cancelIdleCheck();
     call.sendMessage(message);
   }

@@ -74,35 +74,37 @@ final class SQLiteIndexManager implements IndexManager {
   private final String uid;
 
   /**
-   * Maps from a target to its equivalent list of sub-targets. Each sub-target contains only one
+   * Maps from a target to its equivalent list of sub-targets. Each sub-target
+   * contains only one
    * term from the target's disjunctive normal form (DNF).
    */
-  // TODO(orquery): Find a way for the GC algorithm to remove the mapping once we remove a target.
+  // TODO(orquery): Find a way for the GC algorithm to remove the mapping once we
+  // remove a target.
   private final Map<Target, List<Target>> targetToDnfSubTargets = new HashMap<>();
 
   /**
-   * An in-memory copy of the index entries we've already written since the SDK launched. Used to
+   * An in-memory copy of the index entries we've already written since the SDK
+   * launched. Used to
    * avoid re-writing the same entry repeatedly.
    *
-   * <p>This is *NOT* a complete cache of what's in persistence and so can never be used to satisfy
+   * <p>
+   * This is *NOT* a complete cache of what's in persistence and so can never be
+   * used to satisfy
    * reads.
    */
-  private final MemoryIndexManager.MemoryCollectionParentIndex collectionParentsCache =
-      new MemoryIndexManager.MemoryCollectionParentIndex();
+  private final MemoryIndexManager.MemoryCollectionParentIndex collectionParentsCache = new MemoryIndexManager.MemoryCollectionParentIndex();
 
   private final Map<String, Map<Integer, FieldIndex>> memoizedIndexes = new HashMap<>();
-  private final Queue<FieldIndex> nextIndexToUpdate =
-      new PriorityQueue<>(
-          10,
-          (l, r) -> {
-            int sequenceCmp =
-                Long.compare(
-                    l.getIndexState().getSequenceNumber(), r.getIndexState().getSequenceNumber());
-            if (sequenceCmp == 0) {
-              return l.getCollectionGroup().compareTo(r.getCollectionGroup());
-            }
-            return sequenceCmp;
-          });
+  private final Queue<FieldIndex> nextIndexToUpdate = new PriorityQueue<>(
+      10,
+      (l, r) -> {
+        int sequenceCmp = Long.compare(
+            l.getIndexState().getSequenceNumber(), r.getIndexState().getSequenceNumber());
+        if (sequenceCmp == 0) {
+          return l.getCollectionGroup().compareTo(r.getCollectionGroup());
+        }
+        return sequenceCmp;
+      });
 
   private boolean started = false;
   private int memoizedMaxIndexId = -1;
@@ -118,20 +120,19 @@ final class SQLiteIndexManager implements IndexManager {
   public void start() {
     Map<Integer, FieldIndex.IndexState> indexStates = new HashMap<>();
 
-    // Fetch all index states if persisted for the user. These states contain per user information
+    // Fetch all index states if persisted for the user. These states contain per
+    // user information
     // on how up to date the index is.
     db.query(
-            "SELECT index_id, sequence_number, read_time_seconds, read_time_nanos, document_key, "
-                + "largest_batch_id FROM index_state WHERE uid = ?")
+        "SELECT index_id, sequence_number, read_time_seconds, read_time_nanos, document_key, "
+            + "largest_batch_id FROM index_state WHERE uid = ?")
         .binding(uid)
         .forEach(
             row -> {
               int indexId = row.getInt(0);
               long sequenceNumber = row.getLong(1);
-              SnapshotVersion readTime =
-                  new SnapshotVersion(new Timestamp(row.getLong(2), row.getInt(3)));
-              DocumentKey documentKey =
-                  DocumentKey.fromPath(EncodedPath.decodeResourcePath(row.getString(4)));
+              SnapshotVersion readTime = new SnapshotVersion(new Timestamp(row.getLong(2), row.getInt(3)));
+              DocumentKey documentKey = DocumentKey.fromPath(EncodedPath.decodeResourcePath(row.getString(4)));
               int largestBatchId = row.getInt(5);
               indexStates.put(
                   indexId,
@@ -146,20 +147,19 @@ final class SQLiteIndexManager implements IndexManager {
               try {
                 int indexId = row.getInt(0);
                 String collectionGroup = row.getString(1);
-                List<FieldIndex.Segment> segments =
-                    serializer.decodeFieldIndexSegments(Index.parseFrom(row.getBlob(2)));
+                List<FieldIndex.Segment> segments = serializer
+                    .decodeFieldIndexSegments(Index.parseFrom(row.getBlob(2)));
 
                 // If we fetched an index state for the user above, combine it with this index.
                 // We use the default state if we don't have an index state (e.g. the index was
                 // created while a different user as logged in).
-                FieldIndex.IndexState indexState =
-                    indexStates.containsKey(indexId)
-                        ? indexStates.get(indexId)
-                        : FieldIndex.INITIAL_STATE;
-                FieldIndex fieldIndex =
-                    FieldIndex.create(indexId, collectionGroup, segments, indexState);
+                FieldIndex.IndexState indexState = indexStates.containsKey(indexId)
+                    ? indexStates.get(indexId)
+                    : FieldIndex.INITIAL_STATE;
+                FieldIndex fieldIndex = FieldIndex.create(indexId, collectionGroup, segments, indexState);
 
-                // Store the index and update `memoizedMaxIndexId` and `memoizedMaxSequenceNumber`.
+                // Store the index and update `memoizedMaxIndexId` and
+                // `memoizedMaxSequenceNumber`.
                 memoizeIndex(fieldIndex);
               } catch (InvalidProtocolBufferException e) {
                 throw fail("Failed to decode index: " + e);
@@ -205,9 +205,8 @@ final class SQLiteIndexManager implements IndexManager {
     hardAssert(started, "IndexManager not started");
 
     int nextIndexId = memoizedMaxIndexId + 1;
-    index =
-        FieldIndex.create(
-            nextIndexId, index.getCollectionGroup(), index.getSegments(), index.getIndexState());
+    index = FieldIndex.create(
+        nextIndexId, index.getCollectionGroup(), index.getSegments(), index.getIndexState());
 
     db.execute(
         "INSERT INTO index_configuration ("
@@ -257,12 +256,15 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   /**
-   * Updates the index entries for the provided document by deleting entries that are no longer
+   * Updates the index entries for the provided document by deleting entries that
+   * are no longer
    * referenced in {@code newEntries} and adding all newly added entries.
    */
   private void updateEntries(
       Document document, SortedSet<IndexEntry> existingEntries, SortedSet<IndexEntry> newEntries) {
-    Logger.debug(TAG, "Updating index entries for document '%s'", document.getKey());
+    Logger.debug(TAG, "Updating index entries for document '%s'",
+        document.getKey());
+
     diffCollections(
         existingEntries,
         newEntries,
@@ -329,12 +331,16 @@ final class SQLiteIndexManager implements IndexManager {
       }
     }
 
-    // OR queries have more than one sub-target (one sub-target per DNF term). We currently consider
-    // OR queries that have a `limit` to have a partial index. For such queries we perform sorting
+    // OR queries have more than one sub-target (one sub-target per DNF term). We
+    // currently consider
+    // OR queries that have a `limit` to have a partial index. For such queries we
+    // perform sorting
     // and apply the limit in memory as a post-processing step.
-    // TODO(orquery): If we have a FULL index *and* we have the index that can be used for sorting
-    //  all DNF branches on the same value, we can improve performance by performing a JOIN in SQL.
-    //  See b/235224019 for more information.
+    // TODO(orquery): If we have a FULL index *and* we have the index that can be
+    // used for sorting
+    // all DNF branches on the same value, we can improve performance by performing
+    // a JOIN in SQL.
+    // See b/235224019 for more information.
     if (target.hasLimit() && subTargets.size() > 1 && result == IndexType.FULL) {
       return IndexType.PARTIAL;
     }
@@ -362,9 +368,9 @@ final class SQLiteIndexManager implements IndexManager {
     if (target.getFilters().isEmpty()) {
       subTargets.add(target);
     } else {
-      // There is an implicit AND operation between all the filters stored in the target.
-      List<Filter> dnf =
-          getDnfTerms(new CompositeFilter(target.getFilters(), CompositeFilter.Operator.AND));
+      // There is an implicit AND operation between all the filters stored in the
+      // target.
+      List<Filter> dnf = getDnfTerms(new CompositeFilter(target.getFilters(), CompositeFilter.Operator.AND));
       for (Filter term : dnf) {
         subTargets.add(
             new Target(
@@ -382,7 +388,8 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   /**
-   * Stores the index in the memoized indexes table and updates {@link #nextIndexToUpdate}, {@link
+   * Stores the index in the memoized indexes table and updates
+   * {@link #nextIndexToUpdate}, {@link
    * #memoizedMaxIndexId} and {@link #memoizedMaxSequenceNumber}.
    */
   private void memoizeIndex(FieldIndex fieldIndex) {
@@ -400,20 +407,21 @@ final class SQLiteIndexManager implements IndexManager {
     existingIndexes.put(fieldIndex.getIndexId(), fieldIndex);
     nextIndexToUpdate.add(fieldIndex);
     memoizedMaxIndexId = Math.max(memoizedMaxIndexId, fieldIndex.getIndexId());
-    memoizedMaxSequenceNumber =
-        Math.max(memoizedMaxSequenceNumber, fieldIndex.getIndexState().getSequenceNumber());
+    memoizedMaxSequenceNumber = Math.max(memoizedMaxSequenceNumber, fieldIndex.getIndexState().getSequenceNumber());
   }
 
   /** Creates the index entries for the given document. */
   private SortedSet<IndexEntry> computeIndexEntries(Document document, FieldIndex fieldIndex) {
     SortedSet<IndexEntry> result = new TreeSet<>();
 
-    @Nullable byte[] directionalValue = encodeDirectionalElements(fieldIndex, document);
+    @Nullable
+    byte[] directionalValue = encodeDirectionalElements(fieldIndex, document);
     if (directionalValue == null) {
       return result;
     }
 
-    @Nullable FieldIndex.Segment arraySegment = fieldIndex.getArraySegment();
+    @Nullable
+    FieldIndex.Segment arraySegment = fieldIndex.getArraySegment();
     if (arraySegment != null) {
       Value value = document.getField(arraySegment.getFieldPath());
       if (isArray(value)) {
@@ -461,14 +469,13 @@ final class SQLiteIndexManager implements IndexManager {
       DocumentKey documentKey, FieldIndex fieldIndex) {
     SortedSet<IndexEntry> results = new TreeSet<>();
     db.query(
-            "SELECT array_value, directional_value FROM index_entries "
-                + "WHERE index_id = ? AND document_key = ? AND uid = ?")
+        "SELECT array_value, directional_value FROM index_entries "
+            + "WHERE index_id = ? AND document_key = ? AND uid = ?")
         .binding(fieldIndex.getIndexId(), documentKey.toString(), uid)
         .forEach(
-            row ->
-                results.add(
-                    IndexEntry.create(
-                        fieldIndex.getIndexId(), documentKey, row.getBlob(0), row.getBlob(1))));
+            row -> results.add(
+                IndexEntry.create(
+                    fieldIndex.getIndexId(), documentKey, row.getBlob(0), row.getBlob(1))));
     return results;
   }
 
@@ -490,9 +497,12 @@ final class SQLiteIndexManager implements IndexManager {
 
     for (Pair<Target, FieldIndex> pair : indexes) {
       Target subTarget = pair.first;
-      @NonNull FieldIndex fieldIndex = pair.second;
-      @Nullable List<Value> arrayValues = subTarget.getArrayValues(fieldIndex);
-      @Nullable Collection<Value> notInValues = subTarget.getNotInValues(fieldIndex);
+      @NonNull
+      FieldIndex fieldIndex = pair.second;
+      @Nullable
+      List<Value> arrayValues = subTarget.getArrayValues(fieldIndex);
+      @Nullable
+      Collection<Value> notInValues = subTarget.getNotInValues(fieldIndex);
       Bound lowerBound = subTarget.getLowerBound(fieldIndex);
       Bound upperBound = subTarget.getUpperBound(fieldIndex);
 
@@ -513,35 +523,36 @@ final class SQLiteIndexManager implements IndexManager {
       String upperBoundOp = upperBound.isInclusive() ? "<=" : "<";
       Object[] notInEncoded = encodeValues(fieldIndex, subTarget, notInValues);
 
-      Object[] subQueryAndBindings =
-          generateQueryAndBindings(
-              subTarget,
-              fieldIndex.getIndexId(),
-              arrayValues,
-              lowerBoundEncoded,
-              lowerBoundOp,
-              upperBoundEncoded,
-              upperBoundOp,
-              notInEncoded);
+      Object[] subQueryAndBindings = generateQueryAndBindings(
+          subTarget,
+          fieldIndex.getIndexId(),
+          arrayValues,
+          lowerBoundEncoded,
+          lowerBoundOp,
+          upperBoundEncoded,
+          upperBoundOp,
+          notInEncoded);
       subQueries.add(String.valueOf(subQueryAndBindings[0]));
       bindings.addAll(Arrays.asList(subQueryAndBindings).subList(1, subQueryAndBindings.length));
     }
 
     // We are constructing:
     // SELECT DISTINCT document_key FROM (
-    //   (SELECT ...) UNION (SELECT ...) UNION (SELECT ...)
-    //   ORDER BY ...
+    // (SELECT ...) UNION (SELECT ...) UNION (SELECT ...)
+    // ORDER BY ...
     // )
     // LIMIT ...
     //
-    // Note: SQLite does not allow performing ORDER BY on each union clause. The ORDER BY must come
-    // after the last union clause. Also note that LIMIT must be applied *after* the DISTINCT
-    // operator has been performed. When dealing with multiple sub-targets, it's possible that the
+    // Note: SQLite does not allow performing ORDER BY on each union clause. The
+    // ORDER BY must come
+    // after the last union clause. Also note that LIMIT must be applied *after* the
+    // DISTINCT
+    // operator has been performed. When dealing with multiple sub-targets, it's
+    // possible that the
     // same document_key appears multiple times.
-    String unionSubTargets =
-        TextUtils.join(" UNION ", subQueries)
-            + "ORDER BY directional_value, document_key "
-            + (target.getKeyOrder().equals(Direction.ASCENDING) ? "asc " : "desc ");
+    String unionSubTargets = TextUtils.join(" UNION ", subQueries)
+        + "ORDER BY directional_value, document_key "
+        + (target.getKeyOrder().equals(Direction.ASCENDING) ? "asc " : "desc ");
 
     String queryString = "SELECT DISTINCT document_key FROM (" + unionSubTargets + ")";
     if (target.hasLimit()) {
@@ -561,7 +572,8 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   /**
-   * Constructs a SQL query on 'index_entries' that unions all bounds. Returns an array with SQL
+   * Constructs a SQL query on 'index_entries' that unions all bounds. Returns an
+   * array with SQL
    * query string as the first element, followed by binding arguments.
    */
   private Object[] generateQueryAndBindings(
@@ -573,14 +585,17 @@ final class SQLiteIndexManager implements IndexManager {
       Object[] upperBounds,
       String upperBoundOp,
       @Nullable Object[] notIn) {
-    // The number of total statements we union together. This is similar to a distributed normal
-    // form, but adapted for array values. We create a single statement per value in an
-    // ARRAY_CONTAINS or ARRAY_CONTAINS_ANY filter combined with the values from the query bounds.
-    int statementCount =
-        (arrayValues != null ? arrayValues.size() : 1)
-            * max(lowerBounds.length, upperBounds.length);
+    // The number of total statements we union together. This is similar to a
+    // distributed normal
+    // form, but adapted for array values. We create a single statement per value in
+    // an
+    // ARRAY_CONTAINS or ARRAY_CONTAINS_ANY filter combined with the values from the
+    // query bounds.
+    int statementCount = (arrayValues != null ? arrayValues.size() : 1)
+        * max(lowerBounds.length, upperBounds.length);
 
-    // Build the statement. We always include the lower bound, and optionally include an array value
+    // Build the statement. We always include the lower bound, and optionally
+    // include an array value
     // and an upper bound.
     StringBuilder statement = new StringBuilder();
     statement.append("SELECT document_key, directional_value FROM index_entries ");
@@ -601,8 +616,7 @@ final class SQLiteIndexManager implements IndexManager {
     }
 
     // Fill in the bind ("question marks") variables.
-    Object[] bindArgs =
-        fillBounds(statementCount, indexId, arrayValues, lowerBounds, upperBounds, notIn);
+    Object[] bindArgs = fillBounds(statementCount, indexId, arrayValues, lowerBounds, upperBounds, notIn);
 
     List<Object> result = new ArrayList<>();
     result.add(sql.toString());
@@ -618,21 +632,19 @@ final class SQLiteIndexManager implements IndexManager {
       Object[] lowerBounds,
       Object[] upperBounds,
       @Nullable Object[] notInValues) {
-    // Every SQL statement we union together have 5 binds, see generateQueryAndBindings.
+    // Every SQL statement we union together have 5 binds, see
+    // generateQueryAndBindings.
     int bindsPerStatement = 5;
     int statementsPerArrayValue = statementCount / (arrayValues != null ? arrayValues.size() : 1);
 
-    Object[] bindArgs =
-        new Object
-            [statementCount * bindsPerStatement + (notInValues != null ? notInValues.length : 0)];
+    Object[] bindArgs = new Object[statementCount * bindsPerStatement + (notInValues != null ? notInValues.length : 0)];
     int offset = 0;
     for (int i = 0; i < statementCount; ++i) {
       bindArgs[offset++] = indexId;
       bindArgs[offset++] = uid;
-      bindArgs[offset++] =
-          arrayValues != null
-              ? encodeSingleElement(arrayValues.get(i / statementsPerArrayValue))
-              : EMPTY_BYTES_VALUE;
+      bindArgs[offset++] = arrayValues != null
+          ? encodeSingleElement(arrayValues.get(i / statementsPerArrayValue))
+          : EMPTY_BYTES_VALUE;
 
       bindArgs[offset++] = lowerBounds[i % statementsPerArrayValue];
       bindArgs[offset++] = upperBounds[i % statementsPerArrayValue];
@@ -646,7 +658,8 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   /**
-   * Returns an index that can be used to serve the provided target. Returns {@code null} if no
+   * Returns an index that can be used to serve the provided target. Returns
+   * {@code null} if no
    * index is configured.
    */
   @Nullable
@@ -654,10 +667,9 @@ final class SQLiteIndexManager implements IndexManager {
     hardAssert(started, "IndexManager not started");
 
     TargetIndexMatcher targetIndexMatcher = new TargetIndexMatcher(target);
-    String collectionGroup =
-        target.getCollectionGroup() != null
-            ? target.getCollectionGroup()
-            : target.getPath().getLastSegment();
+    String collectionGroup = target.getCollectionGroup() != null
+        ? target.getCollectionGroup()
+        : target.getPath().getLastSegment();
 
     Collection<FieldIndex> collectionIndexes = getFieldIndexes(collectionGroup);
     if (collectionIndexes.isEmpty()) {
@@ -678,7 +690,8 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   /**
-   * Returns the byte encoded form of the directional values in the field index. Returns {@code
+   * Returns the byte encoded form of the directional values in the field index.
+   * Returns {@code
    * null} if the document does not have all fields specified in the index.
    */
   private @Nullable byte[] encodeDirectionalElements(FieldIndex fieldIndex, Document document) {
@@ -703,12 +716,14 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   /**
-   * Encodes the given field values according to the specification in {@code target}. For IN
+   * Encodes the given field values according to the specification in
+   * {@code target}. For IN
    * queries, a list of possible values is returned.
    */
   private @Nullable Object[] encodeValues(
       FieldIndex fieldIndex, Target target, @Nullable Collection<Value> values) {
-    if (values == null) return null;
+    if (values == null)
+      return null;
 
     List<IndexByteEncoder> encoders = new ArrayList<>();
     encoders.add(new IndexByteEncoder());
@@ -729,7 +744,8 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   /**
-   * Encodes the given bounds according to the specification in {@code target}. For IN queries, a
+   * Encodes the given bounds according to the specification in {@code target}.
+   * For IN queries, a
    * list of possible values is returned.
    */
   private Object[] encodeBound(FieldIndex fieldIndex, Target target, Bound bound) {
@@ -748,8 +764,11 @@ final class SQLiteIndexManager implements IndexManager {
   /**
    * Creates a separate encoder for each element of an array.
    *
-   * <p>The method appends each value to all existing encoders (e.g. filter("a", "==",
-   * "a1").filter("b", "in", ["b1", "b2"]) becomes ["a1,b1", "a1,b2"]). A list of new encoders is
+   * <p>
+   * The method appends each value to all existing encoders (e.g. filter("a",
+   * "==",
+   * "a1").filter("b", "in", ["b1", "b2"]) becomes ["a1,b1", "a1,b2"]). A list of
+   * new encoders is
    * returned.
    */
   private List<IndexByteEncoder> expandIndexValues(
@@ -791,12 +810,11 @@ final class SQLiteIndexManager implements IndexManager {
 
     ++memoizedMaxSequenceNumber;
     for (FieldIndex fieldIndex : getFieldIndexes(collectionGroup)) {
-      FieldIndex updatedIndex =
-          FieldIndex.create(
-              fieldIndex.getIndexId(),
-              fieldIndex.getCollectionGroup(),
-              fieldIndex.getSegments(),
-              FieldIndex.IndexState.create(memoizedMaxSequenceNumber, offset));
+      FieldIndex updatedIndex = FieldIndex.create(
+          fieldIndex.getIndexId(),
+          fieldIndex.getCollectionGroup(),
+          fieldIndex.getSegments(),
+          FieldIndex.IndexState.create(memoizedMaxSequenceNumber, offset));
       db.execute(
           "REPLACE INTO index_state (index_id, uid,  sequence_number, "
               + "read_time_seconds, read_time_nanos, document_key, largest_batch_id) "

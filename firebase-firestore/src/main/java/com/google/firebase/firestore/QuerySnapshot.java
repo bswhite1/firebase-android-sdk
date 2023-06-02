@@ -20,6 +20,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.google.firebase.firestore.core.ViewSnapshot;
 import com.google.firebase.firestore.model.Document;
+import com.google.firebase.firestore.util.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -115,6 +116,13 @@ public class QuerySnapshot implements Iterable<QueryDocumentSnapshot> {
       throw new IllegalArgumentException(
           "To include metadata changes with your document changes, you must also pass MetadataChanges.INCLUDE to addSnapshotListener().");
     }
+
+    Logger.debug(
+        "Ben_docChanges",
+        "getDocumentChanges cachedChanges null: %s metaState!=metaChanges: %s query: %s",
+        Boolean.toString((cachedChanges == null)),
+        Boolean.toString((cachedChangesMetadataState != metadataChanges)),
+        snapshot.getQuery().toString());
 
     if (cachedChanges == null || cachedChangesMetadataState != metadataChanges) {
       cachedChanges =

@@ -33,6 +33,7 @@ import com.google.firebase.firestore.model.mutation.Mutation;
 import com.google.firebase.firestore.model.mutation.MutationBatch;
 import com.google.firebase.firestore.model.mutation.Overlay;
 import com.google.firebase.firestore.model.mutation.PatchMutation;
+import com.google.firebase.firestore.util.Logger;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -44,8 +45,10 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 
 /**
- * A readonly view of the local state of all documents we're tracking (i.e. we have a cached version
- * in remoteDocumentCache or local mutations for the document). The view is computed by applying the
+ * A readonly view of the local state of all documents we're tracking (i.e. we
+ * have a cached version
+ * in remoteDocumentCache or local mutations for the document). The view is
+ * computed by applying the
  * mutations in the MutationQueue to the RemoteDocumentCache.
  */
 class LocalDocumentsView {
@@ -84,8 +87,9 @@ class LocalDocumentsView {
   /**
    * Returns the the local view of the document identified by {@code key}.
    *
-   * @return Local view of the document or a an invalid document if we don't have any cached state
-   *     for it.
+   * @return Local view of the document or a an invalid document if we don't have
+   *         any cached state
+   *         for it.
    */
   Document getDocument(DocumentKey key) {
     Overlay overlay = documentOverlayCache.getOverlay(key);
@@ -99,7 +103,9 @@ class LocalDocumentsView {
   /**
    * Gets the local view of the documents identified by {@code keys}.
    *
-   * <p>If we don't have cached state for a document in {@code keys}, a NoDocument will be stored
+   * <p>
+   * If we don't have cached state for a document in {@code keys}, a NoDocument
+   * will be stored
    * for that key in the resulting set.
    */
   ImmutableSortedMap<DocumentKey, Document> getDocuments(Iterable<DocumentKey> keys) {
@@ -108,20 +114,24 @@ class LocalDocumentsView {
   }
 
   /**
-   * Similar to {@link #getDocuments}, but creates the local view from the given {@code baseDocs}
+   * Similar to {@link #getDocuments}, but creates the local view from the given
+   * {@code baseDocs}
    * without retrieving documents from the local store.
    *
-   * @param docs The documents to apply local mutations to get the local views.
-   * @param existenceStateChanged The set of document keys whose existence state is changed. This is
-   *     useful to determine if some documents overlay needs to be recalculated.
+   * @param docs                  The documents to apply local mutations to get
+   *                              the local views.
+   * @param existenceStateChanged The set of document keys whose existence state
+   *                              is changed. This is
+   *                              useful to determine if some documents overlay
+   *                              needs to be recalculated.
    */
   ImmutableSortedMap<DocumentKey, Document> getLocalViewOfDocuments(
       Map<DocumentKey, MutableDocument> docs, Set<DocumentKey> existenceStateChanged) {
     Map<DocumentKey, Overlay> overlays = new HashMap<>();
     populateOverlays(overlays, docs.keySet());
     ImmutableSortedMap<DocumentKey, Document> result = emptyDocumentMap();
-    for (Map.Entry<DocumentKey, OverlayedDocument> entry :
-        computeViews(docs, overlays, existenceStateChanged).entrySet()) {
+    for (Map.Entry<DocumentKey, OverlayedDocument> entry : computeViews(docs, overlays, existenceStateChanged)
+        .entrySet()) {
       result = result.insert(entry.getKey(), entry.getValue().getDocument());
     }
 
@@ -129,8 +139,10 @@ class LocalDocumentsView {
   }
 
   /**
-   * Gets the overlayed documents for the given document map, which will include the local view of
-   * those documents and a {@code FieldMask} indicating which fields are mutated locally, null if
+   * Gets the overlayed documents for the given document map, which will include
+   * the local view of
+   * those documents and a {@code FieldMask} indicating which fields are mutated
+   * locally, null if
    * overlay is a Set or Delete mutation.
    *
    * @param docs The documents to apply local mutations to get the local views.
@@ -145,11 +157,15 @@ class LocalDocumentsView {
   /**
    * Computes the local view for the given documents.
    *
-   * @param docs The documents to compute views for. It also has the base version of the documents.
-   * @param overlays The overlays that need to be applied to the given base version of the
-   *     documents.
-   * @param existenceStateChanged A set of documents whose existence states might have changed. This
-   *     is used to determine if we need to re-calculate overlays from mutation queues.
+   * @param docs                  The documents to compute views for. It also has
+   *                              the base version of the documents.
+   * @param overlays              The overlays that need to be applied to the
+   *                              given base version of the
+   *                              documents.
+   * @param existenceStateChanged A set of documents whose existence states might
+   *                              have changed. This
+   *                              is used to determine if we need to re-calculate
+   *                              overlays from mutation queues.
    * @return A map represents the local documents view.
    */
   private Map<DocumentKey, OverlayedDocument> computeViews(
@@ -161,11 +177,15 @@ class LocalDocumentsView {
     for (MutableDocument doc : docs.values()) {
       Overlay overlay = overlays.get(doc.getKey());
 
-      // Recalculate an overlay if the document's existence state is changed due to a remote
-      // event *and* the overlay is a PatchMutation. This is because document existence state
+      // Recalculate an overlay if the document's existence state is changed due to a
+      // remote
+      // event *and* the overlay is a PatchMutation. This is because document
+      // existence state
       // can change if some patch mutation's preconditions are met.
-      // NOTE: we recalculate when `overlay` is null as well, because there might be a patch
-      // mutation whose precondition does not match before the change (hence overlay==null),
+      // NOTE: we recalculate when `overlay` is null as well, because there might be a
+      // patch
+      // mutation whose precondition does not match before the change (hence
+      // overlay==null),
       // but would now match.
       if (existenceStateChanged.contains(doc.getKey())
           && (overlay == null || overlay.getMutation() instanceof PatchMutation)) {
@@ -181,8 +201,7 @@ class LocalDocumentsView {
       }
     }
 
-    Map<DocumentKey, FieldMask> recalculatedFields =
-        recalculateAndSaveOverlays(recalculateDocuments);
+    Map<DocumentKey, FieldMask> recalculatedFields = recalculateAndSaveOverlays(recalculateDocuments);
     mutatedFields.putAll(recalculatedFields);
 
     Map<DocumentKey, OverlayedDocument> result = new HashMap<>();
@@ -196,14 +215,14 @@ class LocalDocumentsView {
 
   private Map<DocumentKey, FieldMask> recalculateAndSaveOverlays(
       Map<DocumentKey, MutableDocument> docs) {
-    List<MutationBatch> batches =
-        mutationQueue.getAllMutationBatchesAffectingDocumentKeys(docs.keySet());
+    List<MutationBatch> batches = mutationQueue.getAllMutationBatchesAffectingDocumentKeys(docs.keySet());
 
     Map<DocumentKey, FieldMask> masks = new HashMap<>();
     // A reverse lookup map from batch id to the documents within that batch.
     TreeMap<Integer, Set<DocumentKey>> documentsByBatchId = new TreeMap<>();
 
-    // Apply mutations from mutation queue to the documents, collecting batch id and field masks
+    // Apply mutations from mutation queue to the documents, collecting batch id and
+    // field masks
     // along the way.
     for (MutationBatch batch : batches) {
       for (DocumentKey key : batch.getKeys()) {
@@ -225,9 +244,9 @@ class LocalDocumentsView {
     }
 
     Set<DocumentKey> processed = new HashSet<>();
-    // Iterate in descending order of batch ids, skip documents that are already saved.
-    for (Map.Entry<Integer, Set<DocumentKey>> entry :
-        documentsByBatchId.descendingMap().entrySet()) {
+    // Iterate in descending order of batch ids, skip documents that are already
+    // saved.
+    for (Map.Entry<Integer, Set<DocumentKey>> entry : documentsByBatchId.descendingMap().entrySet()) {
       Map<DocumentKey, Mutation> overlays = new HashMap<>();
       for (DocumentKey key : entry.getValue()) {
         if (!processed.contains(key)) {
@@ -245,7 +264,8 @@ class LocalDocumentsView {
   }
 
   /**
-   * Recalculates overlays by reading the documents from remote document cache first, and save them
+   * Recalculates overlays by reading the documents from remote document cache
+   * first, and save them
    * after they are calculated.
    */
   void recalculateAndSaveOverlays(Set<DocumentKey> documentKeys) {
@@ -256,17 +276,29 @@ class LocalDocumentsView {
   /**
    * Performs a query against the local view of all documents.
    *
-   * @param query The query to match documents against.
+   * @param query  The query to match documents against.
    * @param offset Read time and key to start scanning by (exclusive).
    */
   ImmutableSortedMap<DocumentKey, Document> getDocumentsMatchingQuery(
       Query query, IndexOffset offset) {
     ResourcePath path = query.getPath();
     if (query.isDocumentQuery()) {
+      Logger.debug(
+          "Ben_CursorWindow",
+          "LocalDocumentsView.getDocumentsMatchingQuery isDocumentQuery");
+
       return getDocumentsMatchingDocumentQuery(path);
     } else if (query.isCollectionGroupQuery()) {
+
+      Logger.debug(
+          "Ben_CursorWindow",
+          "LocalDocumentsView.getDocumentsMatchingQuery isCollectionGroupQuery");
       return getDocumentsMatchingCollectionGroupQuery(query, offset);
     } else {
+
+      Logger.debug(
+          "Ben_CursorWindow",
+          "LocalDocumentsView.getDocumentsMatchingQuery else statement");
       return getDocumentsMatchingCollectionQuery(query, offset);
     }
   }
@@ -292,12 +324,13 @@ class LocalDocumentsView {
     ImmutableSortedMap<DocumentKey, Document> results = emptyDocumentMap();
     List<ResourcePath> parents = indexManager.getCollectionParents(collectionId);
 
-    // Perform a collection query against each parent that contains the collectionId and
+    // Perform a collection query against each parent that contains the collectionId
+    // and
     // aggregate the results.
     for (ResourcePath parent : parents) {
       Query collectionQuery = query.asCollectionQueryAtPath(parent.append(collectionId));
-      ImmutableSortedMap<DocumentKey, Document> collectionResults =
-          getDocumentsMatchingCollectionQuery(collectionQuery, offset);
+      ImmutableSortedMap<DocumentKey, Document> collectionResults = getDocumentsMatchingCollectionQuery(collectionQuery,
+          offset);
       for (Map.Entry<DocumentKey, Document> docEntry : collectionResults) {
         results = results.insert(docEntry.getKey(), docEntry.getValue());
       }
@@ -306,49 +339,57 @@ class LocalDocumentsView {
   }
 
   /**
-   * Given a collection group, returns the next documents that follow the provided offset, along
+   * Given a collection group, returns the next documents that follow the provided
+   * offset, along
    * with an updated batch ID.
    *
-   * <p>The documents returned by this method are ordered by remote version from the provided
-   * offset. If there are no more remote documents after the provided offset, documents with
-   * mutations in order of batch id from the offset are returned. Since all documents in a batch are
-   * returned together, the total number of documents returned can exceed {@code count}.
+   * <p>
+   * The documents returned by this method are ordered by remote version from the
+   * provided
+   * offset. If there are no more remote documents after the provided offset,
+   * documents with
+   * mutations in order of batch id from the offset are returned. Since all
+   * documents in a batch are
+   * returned together, the total number of documents returned can exceed
+   * {@code count}.
    *
    * @param collectionGroup The collection group for the documents.
-   * @param offset The offset to index into.
-   * @param count The number of documents to return
-   * @return A LocalDocumentsResult with the documents that follow the provided offset and the last
-   *     processed batch id.
+   * @param offset          The offset to index into.
+   * @param count           The number of documents to return
+   * @return A LocalDocumentsResult with the documents that follow the provided
+   *         offset and the last
+   *         processed batch id.
    */
   LocalDocumentsResult getNextDocuments(String collectionGroup, IndexOffset offset, int count) {
-    Map<DocumentKey, MutableDocument> docs =
-        remoteDocumentCache.getAll(collectionGroup, offset, count);
-    Map<DocumentKey, Overlay> overlays =
-        count - docs.size() > 0
-            ? documentOverlayCache.getOverlays(
-                collectionGroup, offset.getLargestBatchId(), count - docs.size())
-            : Collections.emptyMap();
+    Map<DocumentKey, MutableDocument> docs = remoteDocumentCache.getAll(collectionGroup, offset, count);
+    Map<DocumentKey, Overlay> overlays = count - docs.size() > 0
+        ? documentOverlayCache.getOverlays(
+            collectionGroup, offset.getLargestBatchId(), count - docs.size())
+        : Collections.emptyMap();
 
     int largestBatchId = FieldIndex.INITIAL_LARGEST_BATCH_ID;
     for (Overlay overlay : overlays.values()) {
       if (!docs.containsKey(overlay.getKey())) {
         docs.put(overlay.getKey(), getBaseDocument(overlay.getKey(), overlay));
       }
-      // The callsite will use the largest batch ID together with the latest read time to create
-      // a new index offset. Since we only process batch IDs if all remote documents have been read,
-      // no overlay will increase the overall read time. This is why we only need to special case
+      // The callsite will use the largest batch ID together with the latest read time
+      // to create
+      // a new index offset. Since we only process batch IDs if all remote documents
+      // have been read,
+      // no overlay will increase the overall read time. This is why we only need to
+      // special case
       // the batch id.
       largestBatchId = Math.max(largestBatchId, overlay.getLargestBatchId());
     }
 
     populateOverlays(overlays, docs.keySet());
-    Map<DocumentKey, OverlayedDocument> localDocs =
-        computeViews(docs, overlays, Collections.emptySet());
+    Map<DocumentKey, OverlayedDocument> localDocs = computeViews(docs, overlays, Collections.emptySet());
     return LocalDocumentsResult.fromOverlayedDocuments(largestBatchId, localDocs);
   }
 
   /**
-   * Fetches the overlays for {@code keys} and adds them to provided overlay map if the map does not
+   * Fetches the overlays for {@code keys} and adds them to provided overlay map
+   * if the map does not
    * already contain an entry for the given key.
    */
   private void populateOverlays(Map<DocumentKey, Overlay> overlays, Set<DocumentKey> keys) {
@@ -361,14 +402,14 @@ class LocalDocumentsView {
     overlays.putAll(documentOverlayCache.getOverlays(missingOverlays));
   }
 
+  // Original
   private ImmutableSortedMap<DocumentKey, Document> getDocumentsMatchingCollectionQuery(
       Query query, IndexOffset offset) {
-    Map<DocumentKey, MutableDocument> remoteDocuments =
-        remoteDocumentCache.getAll(query.getPath(), offset);
-    Map<DocumentKey, Overlay> overlays =
-        documentOverlayCache.getOverlays(query.getPath(), offset.getLargestBatchId());
+    Map<DocumentKey, MutableDocument> remoteDocuments = remoteDocumentCache.getAll(query.getPath(), offset);
+    Map<DocumentKey, Overlay> overlays = documentOverlayCache.getOverlays(query.getPath(), offset.getLargestBatchId());
 
-    // As documents might match the query because of their overlay we need to include documents
+    // As documents might match the query because of their overlay we need to
+    // include documents
     // for all overlays in the initial document set.
     for (Map.Entry<DocumentKey, Overlay> entry : overlays.entrySet()) {
       if (!remoteDocuments.containsKey(entry.getKey())) {
@@ -392,6 +433,22 @@ class LocalDocumentsView {
     }
 
     return results;
+  }
+
+  private ImmutableSortedMap<DocumentKey, Document> getDocumentsMatchingCollectionQueryNew(
+      Query query, IndexOffset offset) {
+
+    Logger.debug(
+        "Ben_CursorWindow",
+        "getDocumentsMatchingCollectionQuery calling getMatches");
+
+    ImmutableSortedMap<DocumentKey, Document> remoteDocuments = remoteDocumentCache.getMatches(query, offset);
+
+    Logger.debug(
+        "Ben_CursorWindow",
+        "getDocumentsMatchingCollectionQuery returning");
+
+    return remoteDocuments;
   }
 
   /** Returns a base document that can be used to apply `overlay`. */

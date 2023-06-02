@@ -35,27 +35,45 @@ import javax.annotation.Nullable;
 /**
  * The Firestore query engine.
  *
- * <p>Firestore queries can be executed in three modes. The Query Engine determines what mode to use
- * based on what data is persisted. The mode only determines the runtime complexity of the query -
+ * <p>
+ * Firestore queries can be executed in three modes. The Query Engine determines
+ * what mode to use
+ * based on what data is persisted. The mode only determines the runtime
+ * complexity of the query -
  * the result set is equivalent across all implementations.
  *
- * <p>The Query engine will use indexed-based execution if a user has configured any index that can
- * be used to execute query (via {@link FirebaseFirestore#setIndexConfiguration}). Otherwise, the
- * engine will try to optimize the query by re-using a previously persisted query result. If that is
+ * <p>
+ * The Query engine will use indexed-based execution if a user has configured
+ * any index that can
+ * be used to execute query (via
+ * {@link FirebaseFirestore#setIndexConfiguration}). Otherwise, the
+ * engine will try to optimize the query by re-using a previously persisted
+ * query result. If that is
  * not possible, the query will be executed via a full collection scan.
  *
- * <p>Index-based execution is the default when available. The query engine supports partial indexed
- * execution and merges the result from the index lookup with documents that have not yet been
- * indexed. The index evaluation matches the backend's format and as such, the SDK can use indexing
+ * <p>
+ * Index-based execution is the default when available. The query engine
+ * supports partial indexed
+ * execution and merges the result from the index lookup with documents that
+ * have not yet been
+ * indexed. The index evaluation matches the backend's format and as such, the
+ * SDK can use indexing
  * for all queries that the backend supports.
  *
- * <p>If no index exists, the query engine tries to take advantage of the target document mapping in
- * the TargetCache. These mappings exists for all queries that have been synced with the backend at
- * least once and allow the query engine to only read documents that previously matched a query plus
+ * <p>
+ * If no index exists, the query engine tries to take advantage of the target
+ * document mapping in
+ * the TargetCache. These mappings exists for all queries that have been synced
+ * with the backend at
+ * least once and allow the query engine to only read documents that previously
+ * matched a query plus
  * any documents that were edited after the query was last listened to.
  *
- * <p>For queries that have never been CURRENT or free of limbo documents, this specific
- * optimization is not guaranteed to produce the same results as full collection scans. So in these
+ * <p>
+ * For queries that have never been CURRENT or free of limbo documents, this
+ * specific
+ * optimization is not guaranteed to produce the same results as full collection
+ * scans. So in these
  * cases, query processing falls back to full scans.
  */
 public class QueryEngine {
@@ -77,26 +95,54 @@ public class QueryEngine {
       ImmutableSortedSet<DocumentKey> remoteKeys) {
     hardAssert(initialized, "initialize() not called");
 
+    Logger.debug(
+        "BenWindow",
+        "getDocumentsMatchingQuery, query: %s lastLimboFreeSnapshotVersion: %s",
+        query.toString(), lastLimboFreeSnapshotVersion.toString());
+
+    Logger.debug(
+        "BenWindow",
+        "getDocumentsMatchingQuery calling performQueryUsingIndex",
+        query.toString());
+
     ImmutableSortedMap<DocumentKey, Document> result = performQueryUsingIndex(query);
     if (result != null) {
       return result;
     }
+
+    Logger.debug(
+        "BenWindow",
+        "getDocumentsMatchingQuery calling performQueryUsingRemoteKeys",
+        query.toString());
 
     result = performQueryUsingRemoteKeys(query, remoteKeys, lastLimboFreeSnapshotVersion);
     if (result != null) {
       return result;
     }
 
+    Logger.debug(
+        "BenWindow",
+        "getDocumentsMatchingQuery calling executeFullCollectionScan",
+        query.toString());
+
     return executeFullCollectionScan(query);
   }
 
   /**
-   * Performs an indexed query that evaluates the query based on a collection's persisted index
+   * Performs an indexed query that evaluates the query based on a collection's
+   * persisted index
    * values. Returns {@code null} if an index is not available.
    */
   private @Nullable ImmutableSortedMap<DocumentKey, Document> performQueryUsingIndex(Query query) {
     if (query.matchesAllDocuments()) {
-      // Don't use indexes for queries that can be executed by scanning the collection.
+      // Don't use indexes for queries that can be executed by scanning the
+      // collection.
+
+      Logger.debug(
+          LOG_TAG,
+          "performQueryUsingIndex, query.matchesAllDocuments: %s",
+          query.toString());
+
       return null;
     }
 
@@ -105,40 +151,77 @@ public class QueryEngine {
 
     if (indexType.equals(IndexType.NONE)) {
       // The target cannot be served from any index.
+
+      Logger.debug(
+          LOG_TAG,
+          "performQueryUsingIndex, indexType == none: %s",
+          query.toString());
+
       return null;
     }
 
     if (query.hasLimit() && indexType.equals(IndexType.PARTIAL)) {
       // We cannot apply a limit for targets that are served using a partial index.
-      // If a partial index will be used to serve the target, the query may return a superset of
-      // documents that match the target (e.g. if the index doesn't include all the target's
-      // filters), or may return the correct set of documents in the wrong order (e.g. if the index
-      // doesn't include a segment for one of the orderBys). Therefore a limit should not be applied
+      // If a partial index will be used to serve the target, the query may return a
+      // superset of
+      // documents that match the target (e.g. if the index doesn't include all the
+      // target's
+      // filters), or may return the correct set of documents in the wrong order (e.g.
+      // if the index
+      // doesn't include a segment for one of the orderBys). Therefore a limit should
+      // not be applied
       // in such cases.
+
+      Logger.debug(
+          LOG_TAG,
+          "performQueryUsingIndex, indexType = IndexType.PARTIAL: %s",
+          query.toString());
+
       return performQueryUsingIndex(query.limitToFirst(Target.NO_LIMIT));
     }
 
     List<DocumentKey> keys = indexManager.getDocumentsMatchingTarget(target);
+
+    Logger.debug(
+        "BenWindow",
+        "getDocumentsMatchingTarget: %d",
+        keys.size());
+
     hardAssert(keys != null, "index manager must return results for partial and full indexes.");
 
-    ImmutableSortedMap<DocumentKey, Document> indexedDocuments =
-        localDocumentsView.getDocuments(keys);
+    ImmutableSortedMap<DocumentKey, Document> indexedDocuments = localDocumentsView.getDocuments(keys);
+
     IndexOffset offset = indexManager.getMinOffset(target);
 
     ImmutableSortedSet<Document> previousResults = applyQuery(query, indexedDocuments);
     if (needsRefill(query, keys.size(), previousResults, offset.getReadTime())) {
-      // A limit query whose boundaries change due to local edits can be re-run against the cache
-      // by excluding the limit. This ensures that all documents that match the query's filters are
-      // included in the result set. The SDK can then apply the limit once all local edits are
+      // A limit query whose boundaries change due to local edits can be re-run
+      // against the cache
+      // by excluding the limit. This ensures that all documents that match the
+      // query's filters are
+      // included in the result set. The SDK can then apply the limit once all local
+      // edits are
       // incorporated.
+
+      Logger.debug(
+          LOG_TAG,
+          "performQueryUsingIndex, needsRefillL: %s",
+          query.toString());
+
       return performQueryUsingIndex(query.limitToFirst(Target.NO_LIMIT));
     }
+
+    Logger.debug(
+        LOG_TAG,
+        "performQueryUsingIndex, appendRemainingResults: %s",
+        query.toString());
 
     return appendRemainingResults(previousResults, query, offset);
   }
 
   /**
-   * Performs a query based on the target's persisted query mapping. Returns {@code null} if the
+   * Performs a query based on the target's persisted query mapping. Returns
+   * {@code null} if the
    * mapping is not available or cannot be used.
    */
   private @Nullable ImmutableSortedMap<DocumentKey, Document> performQueryUsingRemoteKeys(
@@ -146,28 +229,46 @@ public class QueryEngine {
       ImmutableSortedSet<DocumentKey> remoteKeys,
       SnapshotVersion lastLimboFreeSnapshotVersion) {
     if (query.matchesAllDocuments()) {
-      // Don't use indexes for queries that can be executed by scanning the collection.
+      // Don't use indexes for queries that can be executed by scanning the
+      // collection.
+
+      Logger.debug(
+          LOG_TAG,
+          "performQueryUsingRemoteKeys, full collection scan since query.matchesAllDocuments: %s",
+          query.toString());
+
       return null;
     }
 
     if (lastLimboFreeSnapshotVersion.equals(SnapshotVersion.NONE)) {
-      // Queries that have never seen a snapshot without limbo free documents should be run as a
+      // Queries that have never seen a snapshot without limbo free documents should
+      // be run as a
       // full collection scan.
+
+      Logger.debug(
+          LOG_TAG,
+          "performQueryUsingRemoteKeys, full collection scan since lastLimboFreeSnapshotVersion == none: %s",
+          query.toString());
+
       return null;
     }
 
-    ImmutableSortedMap<DocumentKey, Document> documents =
-        localDocumentsView.getDocuments(remoteKeys);
+    ImmutableSortedMap<DocumentKey, Document> documents = localDocumentsView.getDocuments(remoteKeys);
     ImmutableSortedSet<Document> previousResults = applyQuery(query, documents);
 
     if (needsRefill(query, remoteKeys.size(), previousResults, lastLimboFreeSnapshotVersion)) {
+      Logger.debug(
+          LOG_TAG,
+          "performQueryUsingRemoteKeys, full collection scan since query needsRefill: %s",
+          query.toString());
+
       return null;
     }
 
     if (Logger.isDebugEnabled()) {
       Logger.debug(
           LOG_TAG,
-          "Re-using previous result from %s to execute query: %s",
+          "performQueryUsingRemoteKeys, Re-using previous result from %s to execute query: %s",
           lastLimboFreeSnapshotVersion.toString(),
           query.toString());
     }
@@ -182,10 +283,10 @@ public class QueryEngine {
   /** Applies the query filter and sorting to the provided documents. */
   private ImmutableSortedSet<Document> applyQuery(
       Query query, ImmutableSortedMap<DocumentKey, Document> documents) {
-    // Sort the documents and re-apply the query filter since previously matching documents do not
+    // Sort the documents and re-apply the query filter since previously matching
+    // documents do not
     // necessarily still match the query.
-    ImmutableSortedSet<Document> queryResults =
-        new ImmutableSortedSet<>(Collections.emptyList(), query.comparator());
+    ImmutableSortedSet<Document> queryResults = new ImmutableSortedSet<>(Collections.emptyList(), query.comparator());
     for (Map.Entry<DocumentKey, Document> entry : documents) {
       Document document = entry.getValue();
       if (query.matches(document)) {
@@ -196,17 +297,23 @@ public class QueryEngine {
   }
 
   /**
-   * Determines if a limit query needs to be refilled from cache, making it ineligible for
+   * Determines if a limit query needs to be refilled from cache, making it
+   * ineligible for
    * index-free execution.
    *
-   * @param query The query.
-   * @param expectedDocumentCount The number of documents keys that matched the query at the last
-   *     snapshot.
-   * @param sortedPreviousResults The documents that match the query based on the previous result,
-   *     sorted by the query's comparator. The size of the result set may be different from
-   *     `expectedDocumentCount` if documents cease to match the query.
-   * @param limboFreeSnapshotVersion The version of the snapshot when the query was last
-   *     synchronized.
+   * @param query                    The query.
+   * @param expectedDocumentCount    The number of documents keys that matched the
+   *                                 query at the last
+   *                                 snapshot.
+   * @param sortedPreviousResults    The documents that match the query based on
+   *                                 the previous result,
+   *                                 sorted by the query's comparator. The size of
+   *                                 the result set may be different from
+   *                                 `expectedDocumentCount` if documents cease to
+   *                                 match the query.
+   * @param limboFreeSnapshotVersion The version of the snapshot when the query
+   *                                 was last
+   *                                 synchronized.
    */
   private boolean needsRefill(
       Query query,
@@ -219,20 +326,26 @@ public class QueryEngine {
     }
 
     if (expectedDocumentCount != sortedPreviousResults.size()) {
-      // The query needs to be refilled if a previously matching document no longer matches.
+      // The query needs to be refilled if a previously matching document no longer
+      // matches.
       return true;
     }
 
-    // Limit queries are not eligible for index-free query execution if there is a potential that an
-    // older document from cache now sorts before a document that was previously part of the limit.
-    // This, however, can only happen if the document at the edge of the limit goes out of limit. If
-    // a document that is not the limit boundary sorts differently, the boundary of the limit itself
-    // did not change and documents from cache will continue to be "rejected" by this boundary.
-    // Therefore, we can ignore any modifications that don't affect the last document.
-    Document documentAtLimitEdge =
-        query.getLimitType() == Query.LimitType.LIMIT_TO_FIRST
-            ? sortedPreviousResults.getMaxEntry()
-            : sortedPreviousResults.getMinEntry();
+    // Limit queries are not eligible for index-free query execution if there is a
+    // potential that an
+    // older document from cache now sorts before a document that was previously
+    // part of the limit.
+    // This, however, can only happen if the document at the edge of the limit goes
+    // out of limit. If
+    // a document that is not the limit boundary sorts differently, the boundary of
+    // the limit itself
+    // did not change and documents from cache will continue to be "rejected" by
+    // this boundary.
+    // Therefore, we can ignore any modifications that don't affect the last
+    // document.
+    Document documentAtLimitEdge = query.getLimitType() == Query.LimitType.LIMIT_TO_FIRST
+        ? sortedPreviousResults.getMaxEntry()
+        : sortedPreviousResults.getMinEntry();
     if (documentAtLimitEdge == null) {
       // We don't need to refill the query if there were already no documents.
       return false;
@@ -242,21 +355,30 @@ public class QueryEngine {
   }
 
   private ImmutableSortedMap<DocumentKey, Document> executeFullCollectionScan(Query query) {
-    if (Logger.isDebugEnabled()) {
-      Logger.debug(LOG_TAG, "Using full collection scan to execute query: %s", query.toString());
-    }
+    Logger.debug(
+        "BenWindow",
+        "executeFullCollectionScan, query: %s calling getDocumentsMatchingQuery",
+        query.toString());
+
     return localDocumentsView.getDocumentsMatchingQuery(query, IndexOffset.NONE);
   }
 
   /**
-   * Combines the results from an indexed execution with the remaining documents that have not yet
+   * Combines the results from an indexed execution with the remaining documents
+   * that have not yet
    * been indexed.
    */
   private ImmutableSortedMap<DocumentKey, Document> appendRemainingResults(
       Iterable<Document> indexedResults, Query query, IndexOffset offset) {
+
+    Logger.debug(
+        "BenWindow",
+        "query: %s appendRemainingResults calling getDocumentsMatchingQuery",
+        query.toString());
+
     // Retrieve all results for documents that were updated since the offset.
-    ImmutableSortedMap<DocumentKey, Document> remainingResults =
-        localDocumentsView.getDocumentsMatchingQuery(query, offset);
+    ImmutableSortedMap<DocumentKey, Document> remainingResults = localDocumentsView.getDocumentsMatchingQuery(query,
+        offset);
     for (Document entry : indexedResults) {
       remainingResults = remainingResults.insert(entry.getKey(), entry);
     }

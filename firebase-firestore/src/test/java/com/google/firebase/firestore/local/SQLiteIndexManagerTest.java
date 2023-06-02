@@ -133,20 +133,17 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   public void testAscendingOrderWithLessThanFilter() {
     setUpMultipleOrderBys();
 
-    Query originalQuery =
-        query("coll")
-            .filter(filter("a", "==", 2))
-            .filter(filter("b", "==", 2))
-            .filter(filter("c", "<", 5))
-            .orderBy(orderBy("c", "asc"));
-    Query queryWithNonRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 1))
-            .endAt(bound(/* inclusive= */ false, 6));
-    Query queryWithRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 2))
-            .endAt(bound(/* inclusive= */ false, 4));
+    Query originalQuery = query("coll")
+        .filter(filter("a", "==", 2))
+        .filter(filter("b", "==", 2))
+        .filter(filter("c", "<", 5))
+        .orderBy(orderBy("c", "asc"));
+    Query queryWithNonRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 1))
+        .endAt(bound(/* inclusive= */ false, 6));
+    Query queryWithRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 2))
+        .endAt(bound(/* inclusive= */ false, 4));
 
     verifyResults(originalQuery, "coll/val2", "coll/val3", "coll/val4");
     verifyResults(queryWithNonRestrictedBound, "coll/val2", "coll/val3", "coll/val4");
@@ -157,20 +154,17 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   public void testDescendingOrderWithLessThanFilter() {
     setUpMultipleOrderBys();
 
-    Query originalQuery =
-        query("coll")
-            .filter(filter("a", "==", 2))
-            .filter(filter("b", "==", 2))
-            .filter(filter("c", "<", 5))
-            .orderBy(orderBy("c", "desc"));
-    Query queryWithNonRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 6))
-            .endAt(bound(/* inclusive= */ false, 1));
-    Query queryWithRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 4))
-            .endAt(bound(/* inclusive= */ false, 2));
+    Query originalQuery = query("coll")
+        .filter(filter("a", "==", 2))
+        .filter(filter("b", "==", 2))
+        .filter(filter("c", "<", 5))
+        .orderBy(orderBy("c", "desc"));
+    Query queryWithNonRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 6))
+        .endAt(bound(/* inclusive= */ false, 1));
+    Query queryWithRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 4))
+        .endAt(bound(/* inclusive= */ false, 2));
 
     verifyResults(originalQuery, "coll/val4", "coll/val3", "coll/val2");
     verifyResults(queryWithNonRestrictedBound, "coll/val4", "coll/val3", "coll/val2");
@@ -181,20 +175,17 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   public void testAscendingOrderWithGreaterThanFilter() {
     setUpMultipleOrderBys();
 
-    Query originalQuery =
-        query("coll")
-            .filter(filter("a", "==", 2))
-            .filter(filter("b", "==", 2))
-            .filter(filter("c", ">", 2))
-            .orderBy(orderBy("c", "asc"));
-    Query queryWithNonRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 2))
-            .endAt(bound(/* inclusive= */ false, 6));
-    Query queryWithRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 3))
-            .endAt(bound(/* inclusive= */ false, 5));
+    Query originalQuery = query("coll")
+        .filter(filter("a", "==", 2))
+        .filter(filter("b", "==", 2))
+        .filter(filter("c", ">", 2))
+        .orderBy(orderBy("c", "asc"));
+    Query queryWithNonRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 2))
+        .endAt(bound(/* inclusive= */ false, 6));
+    Query queryWithRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 3))
+        .endAt(bound(/* inclusive= */ false, 5));
 
     verifyResults(originalQuery, "coll/val3", "coll/val4", "coll/val5");
     verifyResults(queryWithNonRestrictedBound, "coll/val3", "coll/val4", "coll/val5");
@@ -205,20 +196,17 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   public void testDescendingOrderWithGreaterThanFilter() {
     setUpMultipleOrderBys();
 
-    Query originalQuery =
-        query("coll")
-            .filter(filter("a", "==", 2))
-            .filter(filter("b", "==", 2))
-            .filter(filter("c", ">", 2))
-            .orderBy(orderBy("c", "desc"));
-    Query queryWithNonRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 6))
-            .endAt(bound(/* inclusive= */ false, 2));
-    Query queryWithRestrictedBound =
-        originalQuery
-            .startAt(bound(/* inclusive= */ false, 5))
-            .endAt(bound(/* inclusive= */ false, 3));
+    Query originalQuery = query("coll")
+        .filter(filter("a", "==", 2))
+        .filter(filter("b", "==", 2))
+        .filter(filter("c", ">", 2))
+        .orderBy(orderBy("c", "desc"));
+    Query queryWithNonRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 6))
+        .endAt(bound(/* inclusive= */ false, 2));
+    Query queryWithRestrictedBound = originalQuery
+        .startAt(bound(/* inclusive= */ false, 5))
+        .endAt(bound(/* inclusive= */ false, 3));
 
     verifyResults(originalQuery, "coll/val5", "coll/val4", "coll/val3");
     verifyResults(queryWithNonRestrictedBound, "coll/val5", "coll/val4", "coll/val3");
@@ -332,11 +320,10 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   @Test
   public void testAppliesStartAtFilterWithNotIn() {
     setUpSingleValueFilter();
-    Query query =
-        query("coll")
-            .filter(filter("count", "!=", 2))
-            .orderBy(orderBy("count"))
-            .startAt(bound(/* inclusive= */ true, 2));
+    Query query = query("coll")
+        .filter(filter("count", "!=", 2))
+        .orderBy(orderBy("count"))
+        .startAt(bound(/* inclusive= */ true, 2));
     verifyResults(query, "coll/val3");
   }
 
@@ -364,13 +351,12 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   @Test
   public void testRangeWithBoundFilter() {
     setUpSingleValueFilter();
-    Query startAt =
-        query("coll")
-            .filter(filter("count", ">=", 1))
-            .filter(filter("count", "<=", 3))
-            .orderBy(orderBy("count"))
-            .startAt(bound(/* inclusive= */ false, 1))
-            .endAt(bound(/* inclusive= */ true, 2));
+    Query startAt = query("coll")
+        .filter(filter("count", ">=", 1))
+        .filter(filter("count", "<=", 3))
+        .orderBy(orderBy("count"))
+        .startAt(bound(/* inclusive= */ false, 1))
+        .endAt(bound(/* inclusive= */ true, 2));
     verifyResults(startAt, "coll/val2");
   }
 
@@ -391,20 +377,18 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   @Test
   public void testNotInWithGreaterThanFilter() {
     setUpSingleValueFilter();
-    Query query =
-        query("coll")
-            .filter(filter("count", ">", 1))
-            .filter(filter("count", "not-in", Collections.singletonList(2)));
+    Query query = query("coll")
+        .filter(filter("count", ">", 1))
+        .filter(filter("count", "not-in", Collections.singletonList(2)));
     verifyResults(query, "coll/val3");
   }
 
   @Test
   public void testOutOfBoundsNotInWithGreaterThanFilter() {
     setUpSingleValueFilter();
-    Query query =
-        query("coll")
-            .filter(filter("count", ">", 2))
-            .filter(filter("count", "not-in", Collections.singletonList(1)));
+    Query query = query("coll")
+        .filter(filter("count", ">", 2))
+        .filter(filter("count", "not-in", Collections.singletonList(1)));
     verifyResults(query, "coll/val3");
   }
 
@@ -423,8 +407,7 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     addDoc("coll/val3", map("a", Collections.singletonList(2), "b", 1));
     addDoc("coll/val4", map("a", Collections.singletonList(2), "b", 2));
 
-    Query query =
-        query("coll").filter(filter("a", "array-contains", 1)).filter(filter("b", "!=", 1));
+    Query query = query("coll").filter(filter("a", "array-contains", 1)).filter(filter("b", "!=", 1));
     verifyResults(query, "coll/val2");
   }
 
@@ -436,10 +419,9 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     addDoc("coll/val3", map("a", Arrays.asList(2, 1)));
     addDoc("coll/val4", map("a", Arrays.asList(2, 2)));
 
-    Query query =
-        query("coll")
-            .filter(filter("a", "array-contains", 1))
-            .filter(filter("a", "!=", Arrays.asList(1, 2)));
+    Query query = query("coll")
+        .filter(filter("a", "array-contains", 1))
+        .filter(filter("a", "!=", Arrays.asList(1, 2)));
     verifyResults(query, "coll/val1", "coll/val3");
   }
 
@@ -447,51 +429,50 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   public void testEqualsWithNotEqualsOnSameField() {
     setUpSingleValueFilter();
 
-    Object[][] filtersAndResults =
-        new Object[][] {
-          new Filter[] {filter("count", ">", 1), filter("count", "!=", 2)},
-          new String[] {"coll/val3"},
-          new Filter[] {filter("count", "==", 1), filter("count", "!=", 2)},
-          new String[] {"coll/val1"},
-          new Filter[] {filter("count", "==", 1), filter("count", "!=", 1)},
-          new String[] {},
-          new Filter[] {filter("count", ">", 2), filter("count", "!=", 2)},
-          new String[] {"coll/val3"},
-          new Filter[] {filter("count", ">=", 2), filter("count", "!=", 2)},
-          new String[] {"coll/val3"},
-          new Filter[] {filter("count", "<=", 2), filter("count", "!=", 2)},
-          new String[] {"coll/val1"},
-          new Filter[] {filter("count", "<=", 2), filter("count", "!=", 1)},
-          new String[] {"coll/val2"},
-          new Filter[] {filter("count", "<", 2), filter("count", "!=", 2)},
-          new String[] {"coll/val1"},
-          new Filter[] {filter("count", "<", 2), filter("count", "!=", 1)},
-          new String[] {},
-          new Filter[] {
+    Object[][] filtersAndResults = new Object[][] {
+        new Filter[] { filter("count", ">", 1), filter("count", "!=", 2) },
+        new String[] { "coll/val3" },
+        new Filter[] { filter("count", "==", 1), filter("count", "!=", 2) },
+        new String[] { "coll/val1" },
+        new Filter[] { filter("count", "==", 1), filter("count", "!=", 1) },
+        new String[] {},
+        new Filter[] { filter("count", ">", 2), filter("count", "!=", 2) },
+        new String[] { "coll/val3" },
+        new Filter[] { filter("count", ">=", 2), filter("count", "!=", 2) },
+        new String[] { "coll/val3" },
+        new Filter[] { filter("count", "<=", 2), filter("count", "!=", 2) },
+        new String[] { "coll/val1" },
+        new Filter[] { filter("count", "<=", 2), filter("count", "!=", 1) },
+        new String[] { "coll/val2" },
+        new Filter[] { filter("count", "<", 2), filter("count", "!=", 2) },
+        new String[] { "coll/val1" },
+        new Filter[] { filter("count", "<", 2), filter("count", "!=", 1) },
+        new String[] {},
+        new Filter[] {
             filter("count", ">", 2), filter("count", "not-in", Collections.singletonList(3))
-          },
-          new String[] {},
-          new Filter[] {
+        },
+        new String[] {},
+        new Filter[] {
             filter("count", ">=", 2), filter("count", "not-in", Collections.singletonList(3))
-          },
-          new String[] {"coll/val2"},
-          new Filter[] {filter("count", ">=", 2), filter("count", "not-in", Arrays.asList(3, 3))},
-          new String[] {"coll/val2"},
-          new Filter[] {filter("count", ">", 1), filter("count", "<", 3), filter("count", "!=", 2)},
-          new String[] {},
-          new Filter[] {
+        },
+        new String[] { "coll/val2" },
+        new Filter[] { filter("count", ">=", 2), filter("count", "not-in", Arrays.asList(3, 3)) },
+        new String[] { "coll/val2" },
+        new Filter[] { filter("count", ">", 1), filter("count", "<", 3), filter("count", "!=", 2) },
+        new String[] {},
+        new Filter[] {
             filter("count", ">=", 1), filter("count", "<", 3), filter("count", "!=", 2)
-          },
-          new String[] {"coll/val1"},
-          new Filter[] {
+        },
+        new String[] { "coll/val1" },
+        new Filter[] {
             filter("count", ">=", 1), filter("count", "<=", 3), filter("count", "!=", 2)
-          },
-          new String[] {"coll/val1", "coll/val3"},
-          new Filter[] {
+        },
+        new String[] { "coll/val1", "coll/val3" },
+        new Filter[] {
             filter("count", ">", 1), filter("count", "<=", 3), filter("count", "!=", 2)
-          },
-          new String[] {"coll/val3"}
-        };
+        },
+        new String[] { "coll/val3" }
+    };
 
     for (int i = 0; i < filtersAndResults.length; i += 2) {
       Query query = query("coll");
@@ -505,14 +486,14 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   @Test
   public void testArrayContainsAnyFilter() {
     setUpArrayValueFilter();
-    Query query =
-        query("coll").filter(filter("values", "array-contains-any", Arrays.asList(1, 2, 4)));
+    Query query = query("coll").filter(filter("values", "array-contains-any", Arrays.asList(1, 2, 4)));
     verifyResults(query, "coll/arr1", "coll/arr2");
   }
 
   @Test
   public void testArrayContainsDoesNotMatchNonArray() {
-    // Set up two field indices. This causes two index entries to be written, but our query should
+    // Set up two field indices. This causes two index entries to be written, but
+    // our query should
     // only use one index.
     setUpArrayValueFilter();
     setUpSingleValueFilter();
@@ -572,11 +553,10 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     addDoc("coll/doc1", map("value", Arrays.asList(1, "foo")));
     addDoc("coll/doc2", map("value", Arrays.asList(3, "foo")));
     addDoc("coll/doc3", map("value", Arrays.asList(2, "foo")));
-    Query query =
-        query("coll")
-            .filter(filter("value", "array-contains", "foo"))
-            .orderBy(orderBy("value"))
-            .limitToFirst(2);
+    Query query = query("coll")
+        .filter(filter("value", "array-contains", "foo"))
+        .orderBy(orderBy("value"))
+        .limitToFirst(2);
     verifyResults(query, "coll/doc1", "coll/doc3");
   }
 
@@ -612,21 +592,20 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     addDoc("coll/val1", map("a", 1, "b", 1, "c", 3));
     addDoc("coll/val2", map("a", 2, "b", 2, "c", 2));
 
-    Query query =
-        query("coll").filter(filter("c", ">", 2)).orderBy(orderBy("c")).startAt(bound(true, 2));
+    Query query = query("coll").filter(filter("c", ">", 2)).orderBy(orderBy("c")).startAt(bound(true, 2));
     verifyResults(query, "coll/val1");
 
-    query =
-        query("coll")
-            .filter(filter("c", "<", 3))
-            .orderBy(orderBy("c", "desc"))
-            .startAt(bound(true, 3));
+    query = query("coll")
+        .filter(filter("c", "<", 3))
+        .orderBy(orderBy("c", "desc"))
+        .startAt(bound(true, 3));
     verifyResults(query, "coll/val2");
   }
 
   @Test
   public void testAdvancedQueries() {
-    // This test compares local query results with those received from the Java Server SDK.
+    // This test compares local query results with those received from the Java
+    // Server SDK.
 
     indexManager.addFieldIndex(fieldIndex("coll", "null", Kind.ASCENDING));
     indexManager.addFieldIndex(fieldIndex("coll", "int", Kind.ASCENDING));
@@ -648,37 +627,36 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     indexManager.addFieldIndex(fieldIndex("coll", "a", Kind.DESCENDING, "b", Kind.DESCENDING));
     indexManager.addFieldIndex(fieldIndex("coll", "b", Kind.ASCENDING, "a", Kind.ASCENDING));
 
-    List<Map<String, Object>> data =
-        new ArrayList<Map<String, Object>>() {
-          {
-            add(map());
-            add(map("int", 1, "array", Arrays.asList(1, "foo")));
-            add(map("array", Arrays.asList(2, "foo")));
-            add(map("int", 3, "array", Arrays.asList(3, "foo")));
-            add(map("array", "foo"));
-            add(map("array", Collections.singletonList(1)));
-            add(map("float", -0.0, "string", "a"));
-            add(map("float", 0, "string", "ab"));
-            add(map("float", 0.0, "string", "b"));
-            add(map("float", Double.NaN));
-            add(map("multi", true));
-            add(map("multi", 1));
-            add(map("multi", "string"));
-            add(map("multi", Collections.emptyList()));
-            add(map("null", null));
-            add(map("prefix", Arrays.asList(1, 2), "suffix", null));
-            add(map("prefix", Collections.singletonList(1), "suffix", 2));
-            add(map("map", map()));
-            add(map("map", map("field", true)));
-            add(map("map", map("field", false)));
-            add(map("a", 0, "b", 0));
-            add(map("a", 0, "b", 1));
-            add(map("a", 1, "b", 0));
-            add(map("a", 1, "b", 1));
-            add(map("a", 2, "b", 0));
-            add(map("a", 2, "b", 1));
-          }
-        };
+    List<Map<String, Object>> data = new ArrayList<Map<String, Object>>() {
+      {
+        add(map());
+        add(map("int", 1, "array", Arrays.asList(1, "foo")));
+        add(map("array", Arrays.asList(2, "foo")));
+        add(map("int", 3, "array", Arrays.asList(3, "foo")));
+        add(map("array", "foo"));
+        add(map("array", Collections.singletonList(1)));
+        add(map("float", -0.0, "string", "a"));
+        add(map("float", 0, "string", "ab"));
+        add(map("float", 0.0, "string", "b"));
+        add(map("float", Double.NaN));
+        add(map("multi", true));
+        add(map("multi", 1));
+        add(map("multi", "string"));
+        add(map("multi", Collections.emptyList()));
+        add(map("null", null));
+        add(map("prefix", Arrays.asList(1, 2), "suffix", null));
+        add(map("prefix", Collections.singletonList(1), "suffix", 2));
+        add(map("map", map()));
+        add(map("map", map("field", true)));
+        add(map("map", map("field", false)));
+        add(map("a", 0, "b", 0));
+        add(map("a", 0, "b", 1));
+        add(map("a", 1, "b", 0));
+        add(map("a", 1, "b", 1));
+        add(map("a", 2, "b", 0));
+        add(map("a", 2, "b", 1));
+      }
+    };
 
     for (int i = 0; i < data.size(); ++i) {
       addDoc("coll/" + Values.canonicalId(wrap(data.get(i))), data.get(i));
@@ -992,7 +970,8 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     verifySequenceNumber(indexManager, "coll2", 0);
     verifySequenceNumber(indexManager, "coll3", 1);
 
-    // Original user signs it. The user should also see the new index with a zero sequence number.
+    // Original user signs it. The user should also see the new index with a zero
+    // sequence number.
     indexManager = persistence.getIndexManager(User.UNAUTHENTICATED);
     indexManager.start();
 
@@ -1031,51 +1010,45 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     Query query8 = query("coll").filter(filter("c", "==", 1)).filter(filter("d", "==", 1));
     validateIndexType(query8, IndexManager.IndexType.FULL);
 
-    Query query9 =
-        query("coll")
-            .filter(filter("c", "==", 1))
-            .filter(filter("d", "==", 1))
-            .orderBy(orderBy("c"));
+    Query query9 = query("coll")
+        .filter(filter("c", "==", 1))
+        .filter(filter("d", "==", 1))
+        .orderBy(orderBy("c"));
     validateIndexType(query9, IndexManager.IndexType.FULL);
 
-    Query query10 =
-        query("coll")
-            .filter(filter("c", "==", 1))
-            .filter(filter("d", "==", 1))
-            .orderBy(orderBy("d"));
+    Query query10 = query("coll")
+        .filter(filter("c", "==", 1))
+        .filter(filter("d", "==", 1))
+        .orderBy(orderBy("d"));
     validateIndexType(query10, IndexManager.IndexType.FULL);
 
-    Query query11 =
-        query("coll")
-            .filter(filter("c", "==", 1))
-            .filter(filter("d", "==", 1))
-            .orderBy(orderBy("c"))
-            .orderBy(orderBy("d"));
+    Query query11 = query("coll")
+        .filter(filter("c", "==", 1))
+        .filter(filter("d", "==", 1))
+        .orderBy(orderBy("c"))
+        .orderBy(orderBy("d"));
     validateIndexType(query11, IndexManager.IndexType.FULL);
 
-    Query query12 =
-        query("coll")
-            .filter(filter("c", "==", 1))
-            .filter(filter("d", "==", 1))
-            .orderBy(orderBy("d"))
-            .orderBy(orderBy("c"));
+    Query query12 = query("coll")
+        .filter(filter("c", "==", 1))
+        .filter(filter("d", "==", 1))
+        .orderBy(orderBy("d"))
+        .orderBy(orderBy("c"));
     validateIndexType(query12, IndexManager.IndexType.FULL);
 
-    Query query13 =
-        query("coll")
-            .filter(filter("c", "==", 1))
-            .filter(filter("d", "==", 1))
-            .orderBy(orderBy("e"));
+    Query query13 = query("coll")
+        .filter(filter("c", "==", 1))
+        .filter(filter("d", "==", 1))
+        .orderBy(orderBy("e"));
     validateIndexType(query13, IndexManager.IndexType.PARTIAL);
 
     Query query14 = query("coll").filter(filter("c", "==", 1)).filter(filter("d", "<=", 1));
     validateIndexType(query14, IndexManager.IndexType.FULL);
 
-    Query query15 =
-        query("coll")
-            .filter(filter("c", "==", 1))
-            .filter(filter("d", ">", 1))
-            .orderBy(orderBy("d"));
+    Query query15 = query("coll")
+        .filter(filter("c", "==", 1))
+        .filter(filter("d", ">", 1))
+        .orderBy(orderBy("d"));
     validateIndexType(query15, IndexManager.IndexType.FULL);
   }
 
@@ -1090,61 +1063,60 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     Query query1 = query("coll").filter(orFilters(filter("a", "==", 1), filter("c", "==", 1)));
     validateIndexType(query1, IndexManager.IndexType.NONE);
 
-    // OR query with explicit orderBy without limit which has missing sub-target indexes.
-    Query query2 =
-        query("coll")
-            .filter(orFilters(filter("a", "==", 1), filter("c", "==", 1)))
-            .orderBy(orderBy("c"));
+    // OR query with explicit orderBy without limit which has missing sub-target
+    // indexes.
+    Query query2 = query("coll")
+        .filter(orFilters(filter("a", "==", 1), filter("c", "==", 1)))
+        .orderBy(orderBy("c"));
     validateIndexType(query2, IndexManager.IndexType.NONE);
 
-    // OR query with implicit orderBy without limit which has missing sub-target indexes.
+    // OR query with implicit orderBy without limit which has missing sub-target
+    // indexes.
     Query query3 = query("coll").filter(orFilters(filter("a", "==", 1), filter("c", ">", 1)));
     validateIndexType(query3, IndexManager.IndexType.NONE);
 
-    // OR query with explicit orderBy with limit which has missing sub-target indexes.
-    Query query4 =
-        query("coll")
-            .filter(orFilters(filter("a", "==", 1), filter("c", "==", 1)))
-            .orderBy(orderBy("c"))
-            .limitToFirst(2);
+    // OR query with explicit orderBy with limit which has missing sub-target
+    // indexes.
+    Query query4 = query("coll")
+        .filter(orFilters(filter("a", "==", 1), filter("c", "==", 1)))
+        .orderBy(orderBy("c"))
+        .limitToFirst(2);
     validateIndexType(query4, IndexManager.IndexType.NONE);
 
-    // OR query with implicit orderBy with limit which has missing sub-target indexes.
-    Query query5 =
-        query("coll").filter(orFilters(filter("a", "==", 1), filter("c", ">", 1))).limitToLast(2);
+    // OR query with implicit orderBy with limit which has missing sub-target
+    // indexes.
+    Query query5 = query("coll").filter(orFilters(filter("a", "==", 1), filter("c", ">", 1))).limitToLast(2);
     validateIndexType(query5, IndexManager.IndexType.NONE);
 
     // OR query without orderBy without limit which has all sub-target indexes.
     Query query6 = query("coll").filter(orFilters(filter("a", "==", 1), filter("b", "==", 1)));
     validateIndexType(query6, IndexManager.IndexType.FULL);
 
-    // OR query with explicit orderBy without limit which has all sub-target indexes.
-    Query query7 =
-        query("coll")
-            .filter(orFilters(filter("a", "==", 1), filter("b", "==", 1)))
-            .orderBy(orderBy("a"));
+    // OR query with explicit orderBy without limit which has all sub-target
+    // indexes.
+    Query query7 = query("coll")
+        .filter(orFilters(filter("a", "==", 1), filter("b", "==", 1)))
+        .orderBy(orderBy("a"));
     validateIndexType(query7, IndexManager.IndexType.FULL);
 
-    // OR query with implicit orderBy without limit which has all sub-target indexes.
+    // OR query with implicit orderBy without limit which has all sub-target
+    // indexes.
     Query query8 = query("coll").filter(orFilters(filter("a", ">", 1), filter("b", "==", 1)));
     validateIndexType(query8, IndexManager.IndexType.FULL);
 
     // OR query without orderBy with limit which has all sub-target indexes.
-    Query query9 =
-        query("coll").filter(orFilters(filter("a", "==", 1), filter("b", "==", 1))).limitToFirst(2);
+    Query query9 = query("coll").filter(orFilters(filter("a", "==", 1), filter("b", "==", 1))).limitToFirst(2);
     validateIndexType(query9, IndexManager.IndexType.PARTIAL);
 
     // OR query with explicit orderBy with limit which has all sub-target indexes.
-    Query query10 =
-        query("coll")
-            .filter(orFilters(filter("a", "==", 1), filter("b", "==", 1)))
-            .orderBy(orderBy("a"))
-            .limitToFirst(2);
+    Query query10 = query("coll")
+        .filter(orFilters(filter("a", "==", 1), filter("b", "==", 1)))
+        .orderBy(orderBy("a"))
+        .limitToFirst(2);
     validateIndexType(query10, IndexManager.IndexType.PARTIAL);
 
     // OR query with implicit orderBy with limit which has all sub-target indexes.
-    Query query11 =
-        query("coll").filter(orFilters(filter("a", ">", 1), filter("b", "==", 1))).limitToLast(2);
+    Query query11 = query("coll").filter(orFilters(filter("a", ">", 1), filter("b", "==", 1))).limitToLast(2);
     validateIndexType(query11, IndexManager.IndexType.PARTIAL);
   }
 
@@ -1166,6 +1138,10 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
   }
 
   private void addDocs(Document... docs) {
+    Logger.debug(
+        "Ben_CursorWindow",
+        "addDocs calling updateIndexEntries");
+
     indexManager.updateIndexEntries(docMap(docs));
   }
 
@@ -1177,8 +1153,7 @@ public class SQLiteIndexManagerTest extends IndexManagerTestCase {
     Target target = query.toTarget();
     List<DocumentKey> results = indexManager.getDocumentsMatchingTarget(target);
     assertNotNull("Target cannot be served from index.", results);
-    List<DocumentKey> keys =
-        Arrays.stream(documents).map(TestUtil::key).collect(Collectors.toList());
+    List<DocumentKey> keys = Arrays.stream(documents).map(TestUtil::key).collect(Collectors.toList());
     assertWithMessage("Result for %s", query)
         .that(results)
         .containsExactlyElementsIn(keys)

@@ -25,7 +25,6 @@ import com.google.firebase.firestore.core.UserData.ParsedSetData;
 import com.google.firebase.firestore.core.UserData.ParsedUpdateData;
 import com.google.firebase.firestore.model.MutableDocument;
 import com.google.firebase.firestore.util.Executors;
-import com.google.firebase.firestore.util.Logger;
 import com.google.firebase.firestore.util.Util;
 import java.util.Collections;
 import java.util.List;
@@ -63,7 +62,6 @@ public class Transaction {
    */
   @NonNull
   public Transaction set(@NonNull DocumentReference documentRef, @NonNull Object data) {
-    Logger.debug("Ben_Transaction", "Entered set 1");
     return set(documentRef, data, SetOptions.OVERWRITE);
   }
 
@@ -85,14 +83,11 @@ public class Transaction {
     checkNotNull(data, "Provided data must not be null.");
     checkNotNull(options, "Provided options must not be null.");
 
-    Logger.debug("Ben_Transaction", "Entered set 2");
-
     ParsedSetData parsed =
         options.isMerge()
             ? firestore.getUserDataReader().parseMergeData(data, options.getFieldMask())
             : firestore.getUserDataReader().parseSetData(data);
     transaction.set(documentRef.getKey(), parsed);
-    Logger.debug("Ben_Transaction", "returning set 2");
     return this;
   }
 
@@ -108,8 +103,6 @@ public class Transaction {
   @NonNull
   public Transaction update(
       @NonNull DocumentReference documentRef, @NonNull Map<String, Object> data) {
-
-    Logger.debug("Ben_Transaction", "Entered update 1");
 
     ParsedUpdateData parsedData = firestore.getUserDataReader().parseUpdateData(data);
     return update(documentRef, parsedData);
@@ -132,8 +125,6 @@ public class Transaction {
       @NonNull String field,
       @Nullable Object value,
       Object... moreFieldsAndValues) {
-
-    Logger.debug("Ben_Transaction", "Entered update 2");
 
     ParsedUpdateData parsedData =
         firestore
@@ -161,8 +152,6 @@ public class Transaction {
       @Nullable Object value,
       Object... moreFieldsAndValues) {
 
-    Logger.debug("Ben_Transaction", "Entered update 3");
-
     ParsedUpdateData parsedData =
         firestore
             .getUserDataReader()
@@ -174,10 +163,8 @@ public class Transaction {
 
   private Transaction update(
       @NonNull DocumentReference documentRef, @NonNull ParsedUpdateData updateData) {
-    Logger.debug("Ben_Transaction", "Entered update 4");
     firestore.validateReference(documentRef);
     transaction.update(documentRef.getKey(), updateData);
-    Logger.debug("Ben_Transaction", "returning update 4");
     return this;
   }
 
@@ -189,10 +176,8 @@ public class Transaction {
    */
   @NonNull
   public Transaction delete(@NonNull DocumentReference documentRef) {
-    Logger.debug("Ben_Transaction", "Entered delete 1");
     firestore.validateReference(documentRef);
     transaction.delete(documentRef.getKey());
-    Logger.debug("Ben_Transaction", "returning delete 1");
     return this;
   }
 
@@ -204,8 +189,6 @@ public class Transaction {
    *     DocumentReference}.
    */
   private Task<DocumentSnapshot> getAsync(DocumentReference documentRef) {
-
-    Logger.debug("Ben_Transaction", "Entered getAsync 1");
 
     return transaction
         .lookup(Collections.singletonList(documentRef.getKey()))
@@ -245,20 +228,15 @@ public class Transaction {
       throws FirebaseFirestoreException {
     firestore.validateReference(documentRef);
 
-    Logger.debug("Ben_Transaction", "Entered get 1");
-
     try {
       return Tasks.await(getAsync(documentRef));
     } catch (ExecutionException ee) {
-
-      Logger.debug("Ben_Transaction", "get ExecutionException: " + ee.toString());
 
       if (ee.getCause() instanceof FirebaseFirestoreException) {
         throw ((FirebaseFirestoreException) ee.getCause());
       }
       throw new RuntimeException(ee.getCause());
     } catch (InterruptedException ie) {
-      Logger.debug("Ben_Transaction", "get RuntimeException: " + ie.toString());
       throw new RuntimeException(ie);
     }
   }

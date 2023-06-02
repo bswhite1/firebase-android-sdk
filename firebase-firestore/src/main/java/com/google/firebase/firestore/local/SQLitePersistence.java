@@ -209,18 +209,13 @@ public final class SQLitePersistence extends Persistence {
   void runTransaction(String action, Runnable operation) {
     Logger.debug(TAG, "Starting transaction: %s", action);
 
-    Logger.debug("Ben_SQLitePersistence", "Entered runTransaction 1");
-
     db.beginTransactionWithListener(transactionListener);
     try {
-      Logger.debug("Ben_SQLitePersistence", "runTransaction 1 operation.run");
       operation.run();
 
-      Logger.debug("Ben_SQLitePersistence", "runTransaction 1 operation.run successful");
       // Note that an exception in operation.run() will prevent this code from running.
       db.setTransactionSuccessful();
     } finally {
-      Logger.debug("Ben_SQLitePersistence", "runTransaction 1 operation.run end");
       db.endTransaction();
     }
   }
@@ -229,19 +224,14 @@ public final class SQLitePersistence extends Persistence {
   <T> T runTransaction(String action, Supplier<T> operation) {
     Logger.debug(TAG, "Starting transaction: %s", action);
 
-    Logger.debug("Ben_SQLitePersistence", "Entered runTransaction 2");
-
     T value = null;
     db.beginTransactionWithListener(transactionListener);
     try {
-      Logger.debug("Ben_SQLitePersistence", "runTransaction 2 operation.get");
       value = operation.get();
-      Logger.debug("Ben_SQLitePersistence", "runTransaction 2 operation.get successful");
 
       // Note that an exception in operation.run() will prevent this code from running.
       db.setTransactionSuccessful();
     } finally {
-      Logger.debug("Ben_SQLitePersistence", "runTransaction 2 operation.get end");
       db.endTransaction();
     }
     return value;
@@ -726,7 +716,7 @@ public final class SQLitePersistence extends Persistence {
       } else if (arg instanceof byte[]) {
         program.bindBlob(i + 1, (byte[]) arg);
       } else {
-        throw fail("Unknown argument %s of type %s", arg, arg.getClass());
+        throw fail("Unknown argument %s, argument index: %d, of type %s", arg, i, arg.getClass());
       }
     }
   }

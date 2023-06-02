@@ -21,8 +21,10 @@ import com.google.firebase.firestore.core.ListenSequence;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.ResourcePath;
 import com.google.firebase.firestore.util.Consumer;
+import com.google.firebase.firestore.util.Logger;
 import java.util.ArrayList;
 import java.util.List;
+
 
 /** Provides LRU functionality for SQLite persistence. */
 class SQLiteLruReferenceDelegate implements ReferenceDelegate, LruDelegate {
@@ -161,12 +163,18 @@ class SQLiteLruReferenceDelegate implements ReferenceDelegate, LruDelegate {
 
     boolean resultsRemaining = true;
 
+    Logger.debug(
+            "Ben_CursorWindow",
+            "start removeOrphanedDocuments upperBound: %s",
+            upperBound);
+
     List<DocumentKey> docsToRemove = new ArrayList<>();
     while (resultsRemaining) {
       int rowsProccessed =
           persistence
               .query(
-                  "select path from target_documents group by path having COUNT(*) = 1 AND target_id = 0 AND sequence_number <= ? LIMIT ?")
+                  "select path from target_documents group by path having COUNT(*) = 1 "
+                      + "AND target_id = 0 AND sequence_number <= ? LIMIT ?")
               .binding(upperBound, REMOVE_ORPHANED_DOCUMENTS_BATCH_SIZE)
               .forEach(
                   row -> {
@@ -180,9 +188,23 @@ class SQLiteLruReferenceDelegate implements ReferenceDelegate, LruDelegate {
                   });
 
       resultsRemaining = (rowsProccessed == REMOVE_ORPHANED_DOCUMENTS_BATCH_SIZE);
+
+      Logger.debug(
+              "Ben_CursorWindow",
+              "removeOrphanedDocuments rowsProccessed: %d resultsRemaining: %s",
+              rowsProccessed, Boolean.toString(resultsRemaining));
     }
 
+    Logger.debug(
+            "Ben_CursorWindow",
+            "removeOrphanedDocuments calling remove all");
+
     persistence.getRemoteDocumentCache().removeAll(docsToRemove);
+
+    Logger.debug(
+            "Ben_CursorWindow",
+            "removeOrphanedDocuments returned from remove all");
+
     return count[0];
   }
 

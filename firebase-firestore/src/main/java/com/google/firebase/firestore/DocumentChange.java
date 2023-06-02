@@ -23,6 +23,7 @@ import com.google.firebase.firestore.core.DocumentViewChange;
 import com.google.firebase.firestore.core.ViewSnapshot;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentSet;
+import com.google.firebase.firestore.util.Logger;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -147,6 +148,12 @@ public class DocumentChange {
         hardAssert(
             lastDoc == null || snapshot.getQuery().comparator().compare(lastDoc, document) < 0,
             "Got added events in wrong order");
+
+        Logger.debug(
+            "Ben_docChanges",
+            "changesFromSnapshot 1 documentSnapshot key: %s",
+            documentSnapshot.getId());
+
         documentChanges.add(new DocumentChange(documentSnapshot, Type.ADDED, -1, index++));
         lastDoc = document;
       }
@@ -182,6 +189,10 @@ public class DocumentChange {
         } else {
           newIndex = -1;
         }
+        Logger.debug(
+            "Ben_docChanges",
+            "changesFromSnapshot 2 documentSnapshot key: %s",
+            documentSnapshot.getId());
         documentChanges.add(new DocumentChange(documentSnapshot, type, oldIndex, newIndex));
       }
     }

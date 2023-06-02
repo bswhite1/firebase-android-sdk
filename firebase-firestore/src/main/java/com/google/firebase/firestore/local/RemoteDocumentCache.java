@@ -14,6 +14,9 @@
 
 package com.google.firebase.firestore.local;
 
+import com.google.firebase.database.collection.ImmutableSortedMap;
+import com.google.firebase.firestore.core.Query;
+import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.FieldIndex.IndexOffset;
 import com.google.firebase.firestore.model.MutableDocument;
@@ -25,8 +28,11 @@ import java.util.Map;
 /**
  * Represents cached documents received from the remote backend.
  *
- * <p>The cache is keyed by DocumentKey and entries in the cache are MaybeDocument instances,
- * meaning we can cache both Document instances (an actual document with data) as well as NoDocument
+ * <p>
+ * The cache is keyed by DocumentKey and entries in the cache are MaybeDocument
+ * instances,
+ * meaning we can cache both Document instances (an actual document with data)
+ * as well as NoDocument
  * instances (indicating that the document is known to not exist).
  */
 interface RemoteDocumentCache {
@@ -37,7 +43,9 @@ interface RemoteDocumentCache {
   /**
    * Adds or replaces an entry in the cache.
    *
-   * <p>The cache key is extracted from {@code maybeDocument.key}. If there is already a cache entry
+   * <p>
+   * The cache key is extracted from {@code maybeDocument.key}. If there is
+   * already a cache entry
    * for the key, it will be replaced.
    *
    * @param document A document to put in the cache.
@@ -52,7 +60,8 @@ interface RemoteDocumentCache {
    * Looks up an entry in the cache.
    *
    * @param documentKey The key of the entry to look up.
-   * @return The cached document entry, or an invalid document if nothing is cached.
+   * @return The cached document entry, or an invalid document if nothing is
+   *         cached.
    */
   MutableDocument get(DocumentKey documentKey);
 
@@ -60,18 +69,20 @@ interface RemoteDocumentCache {
    * Looks up a set of entries in the cache.
    *
    * @param documentKeys The keys of the entries to look up.
-   * @return The cached document entries indexed by key. If an entry is not cached, the
-   *     corresponding key will be mapped to an invalid document
+   * @return The cached document entries indexed by key. If an entry is not
+   *         cached, the
+   *         corresponding key will be mapped to an invalid document
    */
   Map<DocumentKey, MutableDocument> getAll(Iterable<DocumentKey> documentKeys);
 
   /**
-   * Looks up the next {@code limit} documents for a collection group based on the provided offset.
+   * Looks up the next {@code limit} documents for a collection group based on the
+   * provided offset.
    * The ordering is based on the document's read time and key.
    *
    * @param collectionGroup The collection group to scan.
-   * @param offset The offset to start the scan at.
-   * @param limit The maximum number of results to return.
+   * @param offset          The offset to start the scan at.
+   * @param limit           The maximum number of results to return.
    * @return A newly created map with next set of documents.
    */
   Map<DocumentKey, MutableDocument> getAll(String collectionGroup, IndexOffset offset, int limit);
@@ -80,8 +91,11 @@ interface RemoteDocumentCache {
    * Returns the documents from the provided collection.
    *
    * @param collection The collection to read.
-   * @param offset The read time and document key to start scanning at (exclusive).
+   * @param offset     The read time and document key to start scanning at
+   *                   (exclusive).
    * @return A newly created map with the set of documents in the collection.
    */
   Map<DocumentKey, MutableDocument> getAll(ResourcePath collection, IndexOffset offset);
+
+  ImmutableSortedMap<DocumentKey, Document> getMatches(Query query, IndexOffset offset);
 }

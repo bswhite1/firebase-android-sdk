@@ -35,7 +35,9 @@ public class IndexBackfiller {
   private static final long INITIAL_BACKFILL_DELAY_MS = TimeUnit.SECONDS.toMillis(15);
   /** Minimum amount of time between backfill checks, after the first one. */
   private static final long REGULAR_BACKFILL_DELAY_MS = TimeUnit.MINUTES.toMillis(1);
-  /** The maximum number of documents to process each time backfill() is called. */
+  /**
+   * The maximum number of documents to process each time backfill() is called.
+   */
   private static final int MAX_DOCUMENTS_TO_PROCESS = 50;
 
   private final Scheduler scheduler;
@@ -64,7 +66,8 @@ public class IndexBackfiller {
   }
 
   public class Scheduler implements com.google.firebase.firestore.local.Scheduler {
-    @Nullable private AsyncQueue.DelayedTask backfillTask;
+    @Nullable
+    private AsyncQueue.DelayedTask backfillTask;
     private final AsyncQueue asyncQueue;
 
     public Scheduler(AsyncQueue asyncQueue) {
@@ -84,15 +87,14 @@ public class IndexBackfiller {
     }
 
     private void scheduleBackfill(long delay) {
-      backfillTask =
-          asyncQueue.enqueueAfterDelay(
-              AsyncQueue.TimerId.INDEX_BACKFILL,
-              delay,
-              () -> {
-                int documentsProcessed = backfill();
-                Logger.debug(LOG_TAG, "Documents written: %s", documentsProcessed);
-                scheduleBackfill(REGULAR_BACKFILL_DELAY_MS);
-              });
+      backfillTask = asyncQueue.enqueueAfterDelay(
+          AsyncQueue.TimerId.INDEX_BACKFILL,
+          delay,
+          () -> {
+            int documentsProcessed = backfill();
+            Logger.debug(LOG_TAG, "Documents written: %s", documentsProcessed);
+            scheduleBackfill(REGULAR_BACKFILL_DELAY_MS);
+          });
     }
   }
 
@@ -100,12 +102,18 @@ public class IndexBackfiller {
     return scheduler;
   }
 
-  /** Runs a single backfill operation and returns the number of documents processed. */
+  /**
+   * Runs a single backfill operation and returns the number of documents
+   * processed.
+   */
   public int backfill() {
     return persistence.runTransaction("Backfill Indexes", () -> this.writeIndexEntries());
   }
 
-  /** Writes index entries until the cap is reached. Returns the number of documents processed. */
+  /**
+   * Writes index entries until the cap is reached. Returns the number of
+   * documents processed.
+   */
   private int writeIndexEntries() {
     IndexManager indexManager = indexManagerOfCurrentUser.get();
     Set<String> processedCollectionGroups = new HashSet<>();
@@ -123,7 +131,8 @@ public class IndexBackfiller {
   }
 
   /**
-   * Writes entries for the provided collection group. Returns the number of documents processed.
+   * Writes entries for the provided collection group. Returns the number of
+   * documents processed.
    */
   private int writeEntriesForCollectionGroup(
       String collectionGroup, int documentsRemainingUnderCap) {
@@ -132,9 +141,13 @@ public class IndexBackfiller {
     // Use the earliest offset of all field indexes to query the local cache.
     IndexOffset existingOffset = indexManager.getMinOffset(collectionGroup);
 
-    LocalDocumentsResult nextBatch =
-        localDocumentsView.getNextDocuments(
-            collectionGroup, existingOffset, documentsRemainingUnderCap);
+    LocalDocumentsResult nextBatch = localDocumentsView.getNextDocuments(
+        collectionGroup, existingOffset, documentsRemainingUnderCap);
+
+    Logger.debug(
+        "Ben_CursorWindow",
+        "writeEntriesForCollectionGroup calling updateIndexEntries");
+
     indexManager.updateIndexEntries(nextBatch.getDocuments());
 
     IndexOffset newOffset = getNewOffset(existingOffset, nextBatch);

@@ -34,8 +34,6 @@ import com.google.firebase.firestore.model.mutation.Precondition;
 import com.google.firebase.firestore.model.mutation.VerifyMutation;
 import com.google.firebase.firestore.remote.Datastore;
 import com.google.firebase.firestore.util.Executors;
-import com.google.firebase.firestore.util.Logger;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -82,8 +80,6 @@ public class Transaction {
   public Task<List<MutableDocument>> lookup(List<DocumentKey> keys) {
     ensureCommitNotCalled();
 
-    Logger.debug("Ben_CoreTransaction", "Entered lookup");
-
     if (mutations.size() != 0) {
       return Tasks.forException(
           new FirebaseFirestoreException(
@@ -106,7 +102,6 @@ public class Transaction {
 
   /** Stores a set mutation for the given key and value, to be committed when commit() is called. */
   public void set(DocumentKey key, ParsedSetData data) {
-    Logger.debug("Ben_CoreTransaction", "Entered set");
     write(Collections.singletonList(data.toMutation(key, precondition(key))));
     writtenDocs.add(key);
   }
@@ -116,7 +111,6 @@ public class Transaction {
    * called.
    */
   public void update(DocumentKey key, ParsedUpdateData data) {
-    Logger.debug("Ben_CoreTransaction", "Entered update");
     try {
       write(Collections.singletonList(data.toMutation(key, preconditionForUpdate(key))));
     } catch (FirebaseFirestoreException e) {
@@ -126,13 +120,13 @@ public class Transaction {
   }
 
   public void delete(DocumentKey key) {
-    Logger.debug("Ben_CoreTransaction", "Entered delete");
+
     write(Collections.singletonList(new DeleteMutation(key, precondition(key))));
     writtenDocs.add(key);
   }
 
   public Task<Void> commit() {
-    Logger.debug("Ben_CoreTransaction", "Entered commit");
+
     ensureCommitNotCalled();
 
     if (lastWriteError != null) {
@@ -182,8 +176,6 @@ public class Transaction {
   }
 
   private void recordVersion(MutableDocument doc) throws FirebaseFirestoreException {
-
-    Logger.debug("Ben_CoreTransaction", "Entered recordVersion");
 
     SnapshotVersion docVersion;
     if (doc.isFoundDocument()) {
@@ -255,7 +247,6 @@ public class Transaction {
   }
 
   private void write(List<Mutation> mutations) {
-    Logger.debug("Ben_CoreTransaction", "Entered write");
     ensureCommitNotCalled();
     this.mutations.addAll(mutations);
   }

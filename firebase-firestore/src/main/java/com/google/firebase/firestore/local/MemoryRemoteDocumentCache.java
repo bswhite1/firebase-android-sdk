@@ -19,12 +19,14 @@ import static com.google.firebase.firestore.util.Assert.hardAssert;
 
 import androidx.annotation.NonNull;
 import com.google.firebase.database.collection.ImmutableSortedMap;
+import com.google.firebase.firestore.core.Query;
 import com.google.firebase.firestore.model.Document;
 import com.google.firebase.firestore.model.DocumentKey;
 import com.google.firebase.firestore.model.FieldIndex.IndexOffset;
 import com.google.firebase.firestore.model.MutableDocument;
 import com.google.firebase.firestore.model.ResourcePath;
 import com.google.firebase.firestore.model.SnapshotVersion;
+import com.google.firebase.firestore.util.Logger;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -65,8 +67,7 @@ final class MemoryRemoteDocumentCache implements RemoteDocumentCache {
     ImmutableSortedMap<DocumentKey, Document> deletedDocs = emptyDocumentMap();
     for (DocumentKey key : keys) {
       docs = docs.remove(key);
-      deletedDocs =
-          deletedDocs.insert(key, MutableDocument.newNoDocument(key, SnapshotVersion.NONE));
+      deletedDocs = deletedDocs.insert(key, MutableDocument.newNoDocument(key, SnapshotVersion.NONE));
     }
     indexManager.updateIndexEntries(deletedDocs);
   }
@@ -89,7 +90,8 @@ final class MemoryRemoteDocumentCache implements RemoteDocumentCache {
   @Override
   public Map<DocumentKey, MutableDocument> getAll(
       String collectionGroup, IndexOffset offset, int limit) {
-    // This method should only be called from the IndexBackfiller if SQLite is enabled.
+    // This method should only be called from the IndexBackfiller if SQLite is
+    // enabled.
     throw new UnsupportedOperationException("getAll(String, IndexOffset, int) is not supported.");
   }
 
@@ -97,10 +99,22 @@ final class MemoryRemoteDocumentCache implements RemoteDocumentCache {
   public Map<DocumentKey, MutableDocument> getAll(ResourcePath collection, IndexOffset offset) {
     Map<DocumentKey, MutableDocument> result = new HashMap<>();
 
-    // Documents are ordered by key, so we can use a prefix scan to narrow down the documents
+    Logger.debug(
+        "Ben_CursorWindow",
+        "MemoryRemoteDocumentCache.getAll collection: %s", collection.canonicalString());
+
+    // Documents are ordered by key, so we can use a prefix scan to narrow down the
+    // documents
     // we need to match the query against.
     DocumentKey prefix = DocumentKey.fromPath(collection.append(""));
+
+    Logger.debug(
+        "Ben_CursorWindow",
+        "MemoryRemoteDocumentCache.getAll prefix: %s", prefix.toString());
+
     Iterator<Map.Entry<DocumentKey, Document>> iterator = docs.iteratorFrom(prefix);
+
+    int counter = 0;
 
     while (iterator.hasNext()) {
       Map.Entry<DocumentKey, Document> entry = iterator.next();
@@ -122,8 +136,14 @@ final class MemoryRemoteDocumentCache implements RemoteDocumentCache {
         continue;
       }
 
+      counter++;
+
       result.put(doc.getKey(), doc.mutableCopy());
     }
+
+    Logger.debug(
+        "Ben_CursorWindow",
+        "MemoryRemoteDocumentCache.getAll returning: %d", counter);
 
     return result;
   }
@@ -141,14 +161,14 @@ final class MemoryRemoteDocumentCache implements RemoteDocumentCache {
   }
 
   /**
-   * A proxy that exposes an iterator over the current set of documents in the RemoteDocumentCache.
+   * A proxy that exposes an iterator over the current set of documents in the
+   * RemoteDocumentCache.
    */
   private class DocumentIterable implements Iterable<Document> {
     @NonNull
     @Override
     public Iterator<Document> iterator() {
-      Iterator<Map.Entry<DocumentKey, Document>> iterator =
-          MemoryRemoteDocumentCache.this.docs.iterator();
+      Iterator<Map.Entry<DocumentKey, Document>> iterator = MemoryRemoteDocumentCache.this.docs.iterator();
       return new Iterator<Document>() {
         @Override
         public boolean hasNext() {
@@ -161,5 +181,13 @@ final class MemoryRemoteDocumentCache implements RemoteDocumentCache {
         }
       };
     }
+  }
+
+  @Override
+  public ImmutableSortedMap<DocumentKey, Document> getMatches(
+      Query query, IndexOffset offset) {
+    ImmutableSortedMap<DocumentKey, Document> temp = emptyDocumentMap();
+
+    return temp;
   }
 }
