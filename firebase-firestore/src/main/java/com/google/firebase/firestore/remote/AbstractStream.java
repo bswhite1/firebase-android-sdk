@@ -37,27 +37,21 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
- * An AbstractStream is an abstract base class that implements the Stream
- * interface.
+ * An AbstractStream is an abstract base class that implements the Stream interface.
  *
- * @param <ReqT>      The proto type that will be sent in this stream
- * @param <RespT>     The proto type that is received through this stream
+ * @param <ReqT> The proto type that will be sent in this stream
+ * @param <RespT> The proto type that is received through this stream
  * @param <CallbackT> The type which is used for stream specific callbacks.
  */
 abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
     implements Stream<CallbackT> {
 
   /**
-   * A "runner" that runs operations but only if closeCount remains unchanged.
-   * This allows us to
-   * turn auth / stream callbacks into no-ops if the stream is closed / re-opened,
-   * etc.
+   * A "runner" that runs operations but only if closeCount remains unchanged. This allows us to
+   * turn auth / stream callbacks into no-ops if the stream is closed / re-opened, etc.
    *
-   * <p>
-   * PORTING NOTE: Because all the stream callbacks already happen on the
-   * workerQueue, we don't
-   * need to dispatch onto the queue, and so we instead only expose a run() method
-   * which asserts
+   * <p>PORTING NOTE: Because all the stream callbacks already happen on the workerQueue, we don't
+   * need to dispatch onto the queue, and so we instead only expose a run() method which asserts
    * that we're already on the workerQueue.
    */
   class CloseGuardedRunner {
@@ -79,10 +73,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
     }
   }
 
-  /**
-   * Implementation of IncomingStreamObserver that runs callbacks via
-   * CloseGuardedRunner.
-   */
+  /** Implementation of IncomingStreamObserver that runs callbacks via CloseGuardedRunner. */
   class StreamObserver implements IncomingStreamObserver<RespT> {
     private final CloseGuardedRunner dispatcher;
 
@@ -187,15 +178,13 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   private static final long HEALTHY_TIMEOUT_MS = TimeUnit.SECONDS.toMillis(10);
 
   /**
-   * Maximum backoff time for reconnecting when we know the connection is failed
-   * on the client-side.
+   * Maximum backoff time for reconnecting when we know the connection is failed on the client-side.
    */
-  private static final long BACKOFF_CLIENT_NETWORK_FAILURE_MAX_DELAY_MS = TimeUnit.SECONDS.toMillis(10);
+  private static final long BACKOFF_CLIENT_NETWORK_FAILURE_MAX_DELAY_MS =
+      TimeUnit.SECONDS.toMillis(10);
 
-  @Nullable
-  private DelayedTask healthCheck;
-  @Nullable
-  private DelayedTask idleTimer;
+  @Nullable private DelayedTask healthCheck;
+  @Nullable private DelayedTask idleTimer;
 
   private final FirestoreChannel firestoreChannel;
   private final MethodDescriptor<ReqT, RespT> methodDescriptor;
@@ -207,8 +196,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   private State state = State.Initial;
 
   /**
-   * A close count that's incremented every time the stream is closed; used by
-   * CloseGuardedRunner to
+   * A close count that's incremented every time the stream is closed; used by CloseGuardedRunner to
    * invalidate callbacks that happen after close.
    */
   private long closeCount = 0;
@@ -233,12 +221,13 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
     this.listener = listener;
     this.idleTimeoutRunnable = new IdleTimeoutRunnable();
 
-    backoff = new ExponentialBackoff(
-        workerQueue,
-        connectionTimerId,
-        BACKOFF_INITIAL_DELAY_MS,
-        BACKOFF_FACTOR,
-        BACKOFF_MAX_DELAY_MS);
+    backoff =
+        new ExponentialBackoff(
+            workerQueue,
+            connectionTimerId,
+            BACKOFF_INITIAL_DELAY_MS,
+            BACKOFF_FACTOR,
+            BACKOFF_MAX_DELAY_MS);
   }
 
   @Override
@@ -277,17 +266,16 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
    * Closes the stream and cleans up as necessary:
    *
    * <ul>
-   * <li>closes the underlying GRPC stream;
-   * <li>calls the onClose handler with the given 'status';
-   * <li>sets internal stream state to 'finalState';
-   * <li>adjusts the backoff timer based on status
+   *   <li>closes the underlying GRPC stream;
+   *   <li>calls the onClose handler with the given 'status';
+   *   <li>sets internal stream state to 'finalState';
+   *   <li>adjusts the backoff timer based on status
    * </ul>
    *
-   * <p>
-   * A new stream can be opened by calling {@link #start).
+   * <p>A new stream can be opened by calling {@link #start).
    *
    * @param finalState the intended state of the stream after closing.
-   * @param status     the status to emit to the listener.
+   * @param status the status to emit to the listener.
    */
   private void close(State finalState, Status status) {
     hardAssert(isStarted(), "Only started streams should be closed.");
@@ -297,8 +285,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
     workerQueue.verifyIsCurrentThread();
 
     if (Datastore.isMissingSslCiphers(status)) {
-      // The Android device is missing required SSL Ciphers. This error is
-      // non-recoverable and must
+      // The Android device is missing required SSL Ciphers. This error is non-recoverable and must
       // be addressed by the app developer (see https://bit.ly/2XFpdma).
       Util.crashMainThread(
           new IllegalStateException(SSL_DEPENDENCY_ERROR_MESSAGE, status.getCause()));
@@ -309,15 +296,13 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
     cancelHealthCheck();
     this.backoff.cancel();
 
-    // Invalidates any stream-related callbacks (e.g. from auth or the underlying
-    // stream),
+    // Invalidates any stream-related callbacks (e.g. from auth or the underlying stream),
     // guaranteeing they won't execute.
     this.closeCount++;
 
     Code code = status.getCode();
     if (code == Code.OK) {
-      // If this is an intentional close ensure we don't delay our next connection
-      // attempt.
+      // If this is an intentional close ensure we don't delay our next connection attempt.
       backoff.reset();
     } else if (code == Code.RESOURCE_EXHAUSTED) {
       Logger.debug(
@@ -334,8 +319,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
       // to ensure that we fetch a new token.
       firestoreChannel.invalidateToken();
     } else if (code == Code.UNAVAILABLE) {
-      // This exception is thrown when the gRPC connection fails on the client side,
-      // To shorten
+      // This exception is thrown when the gRPC connection fails on the client side, To shorten
       // reconnect time, we can use a shorter max delay when reconnecting.
       if (status.getCause() instanceof java.net.UnknownHostException
           || status.getCause() instanceof java.net.ConnectException) {
@@ -352,8 +336,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
     }
 
     if (call != null) {
-      // Clean up the underlying RPC. If this close() is in response to an error,
-      // don't attempt to
+      // Clean up the underlying RPC. If this close() is in response to an error, don't attempt to
       // call half-close to avoid secondary failures.
       if (status.isOk()) {
         Logger.debug(
@@ -365,8 +348,7 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
       call = null;
     }
 
-    // This state must be assigned before calling listener.onClose to allow the
-    // callback to
+    // This state must be assigned before calling listener.onClose to allow the callback to
     // inhibit backoff or otherwise manipulate the state in its non-started state.
     this.state = finalState;
 
@@ -375,12 +357,10 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   }
 
   /**
-   * Can be overridden to perform additional cleanup before the stream is closed.
-   * Calling
+   * Can be overridden to perform additional cleanup before the stream is closed. Calling
    * super.tearDown() is not required.
    */
-  protected void tearDown() {
-  }
+  protected void tearDown() {}
 
   @Override
   public void stop() {
@@ -412,26 +392,20 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   /** Called by the idle timer when the stream should close due to inactivity. */
   private void handleIdleCloseTimer() {
     if (this.isOpen()) {
-      // When timing out an idle stream there's no reason to force the stream into
-      // backoff when
+      // When timing out an idle stream there's no reason to force the stream into backoff when
       // it restarts so set the stream state to Initial instead of Error.
       close(State.Initial, Status.OK);
     }
   }
 
-  /**
-   * Called when GRPC closes the stream, which should always be due to some error.
-   */
+  /** Called when GRPC closes the stream, which should always be due to some error. */
   @VisibleForTesting
   void handleServerClose(Status status) {
     hardAssert(isStarted(), "Can't handle server close on non-started stream!");
 
-    // In theory the stream could close cleanly, however, in our current model we
-    // never expect this
-    // to happen because if we stop a stream ourselves, this callback will never be
-    // called. To
-    // prevent cases where we retry without a backoff accidentally, we set the
-    // stream to error
+    // In theory the stream could close cleanly, however, in our current model we never expect this
+    // to happen because if we stop a stream ourselves, this callback will never be called. To
+    // prevent cases where we retry without a backoff accidentally, we set the stream to error
     // in all cases.
     close(State.Error, status);
   }
@@ -443,14 +417,15 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
 
     // Mark this stream as healthy if it's still open after 10 seconds.
     if (healthCheck == null) {
-      healthCheck = workerQueue.enqueueAfterDelay(
-          this.healthTimerId,
-          HEALTHY_TIMEOUT_MS,
-          () -> {
-            if (this.isOpen()) {
-              state = State.Healthy;
-            }
-          });
+      healthCheck =
+          workerQueue.enqueueAfterDelay(
+              this.healthTimerId,
+              HEALTHY_TIMEOUT_MS,
+              () -> {
+                if (this.isOpen()) {
+                  state = State.Healthy;
+                }
+              });
     }
   }
 
@@ -471,25 +446,20 @@ abstract class AbstractStream<ReqT, RespT, CallbackT extends StreamCallback>
   }
 
   /**
-   * Marks this stream as idle. If no further actions are performed on the stream
-   * for one minute,
-   * the stream will automatically close itself and notify the stream's onClose()
-   * handler with
-   * Status.OK. The stream will then be in a !isStarted() state, requiring the
-   * caller to start the
+   * Marks this stream as idle. If no further actions are performed on the stream for one minute,
+   * the stream will automatically close itself and notify the stream's onClose() handler with
+   * Status.OK. The stream will then be in a !isStarted() state, requiring the caller to start the
    * stream again before further use.
    *
-   * <p>
-   * Only streams that are in state 'Open' can be marked idle, as all other states
-   * imply pending
+   * <p>Only streams that are in state 'Open' can be marked idle, as all other states imply pending
    * network operations.
    */
   void markIdle() {
-    // Starts the idle timer if we are in state 'Open' and are not yet already
-    // running a timer (in
+    // Starts the idle timer if we are in state 'Open' and are not yet already running a timer (in
     // which case the previous idle timeout still applies).
     if (this.isOpen() && idleTimer == null) {
-      idleTimer = workerQueue.enqueueAfterDelay(this.idleTimerId, IDLE_TIMEOUT_MS, idleTimeoutRunnable);
+      idleTimer =
+          workerQueue.enqueueAfterDelay(this.idleTimerId, IDLE_TIMEOUT_MS, idleTimeoutRunnable);
     }
   }
 
