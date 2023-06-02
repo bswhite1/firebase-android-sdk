@@ -177,9 +177,6 @@ final class SQLiteIndexManager implements IndexManager {
     if (collectionParentsCache.add(collectionPath)) {
       String collectionId = collectionPath.getLastSegment();
       ResourcePath parentPath = collectionPath.popLast();
-
-      // Logger.debug("Ben_memory", "SQLiteIndexManager INSERT OR REPLACE INTO collection_parents. collectionId: %s", collectionId);
-
       db.execute(
           "INSERT OR REPLACE INTO collection_parents "
               + "(collection_id, parent) "
@@ -211,8 +208,6 @@ final class SQLiteIndexManager implements IndexManager {
     index =
         FieldIndex.create(
             nextIndexId, index.getCollectionGroup(), index.getSegments(), index.getIndexState());
-
-            // Logger.debug("Ben_memory", "SQLiteIndexManager INSERT INTO index_configuration. nextIndexId: %d", nextIndexId);
 
     db.execute(
         "INSERT INTO index_configuration ("
@@ -441,7 +436,6 @@ final class SQLiteIndexManager implements IndexManager {
   }
 
   private void addIndexEntry(Document document, IndexEntry indexEntry) {
-    // Logger.debug("Ben_memory", "SQLiteIndexManager INSERT INTO index_entries. document: %s", document.getKey().toString());
     db.execute(
         "INSERT INTO index_entries (index_id, uid, array_value, directional_value, document_key) "
             + "VALUES(?, ?, ?, ?, ?)",

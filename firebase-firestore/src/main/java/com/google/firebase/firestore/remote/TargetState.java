@@ -22,7 +22,6 @@ import com.google.firebase.firestore.model.DocumentKey;
 import com.google.protobuf.ByteString;
 import java.util.HashMap;
 import java.util.Map;
-import com.google.firebase.firestore.util.Logger;
 
 /** Tracks the internal state of a Watch target. */
 final class TargetState {
@@ -104,8 +103,6 @@ final class TargetState {
           modifiedDocuments = modifiedDocuments.insert(key);
           break;
         case REMOVED:
-        //Ben
-        // Logger.debug("Ben_Reset", "TargetState toTargetChange removing %s from syncedDocuments", key);
           removedDocuments = removedDocuments.insert(key);
           break;
         default:

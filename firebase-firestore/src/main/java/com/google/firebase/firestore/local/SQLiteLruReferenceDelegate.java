@@ -23,7 +23,6 @@ import com.google.firebase.firestore.model.ResourcePath;
 import com.google.firebase.firestore.util.Consumer;
 import java.util.ArrayList;
 import java.util.List;
-import com.google.firebase.firestore.util.Logger;
 
 /** Provides LRU functionality for SQLite persistence. */
 class SQLiteLruReferenceDelegate implements ReferenceDelegate, LruDelegate {
@@ -111,12 +110,12 @@ class SQLiteLruReferenceDelegate implements ReferenceDelegate, LruDelegate {
 
   @Override
   public void addReference(DocumentKey key) {
-    // writeSentinel(key);
+    writeSentinel(key);
   }
 
   @Override
   public void removeReference(DocumentKey key) {
-    // writeSentinel(key);
+    writeSentinel(key);
   }
 
   @Override
@@ -126,7 +125,7 @@ class SQLiteLruReferenceDelegate implements ReferenceDelegate, LruDelegate {
 
   @Override
   public void removeMutationReference(DocumentKey key) {
-    // writeSentinel(key);
+    writeSentinel(key);
   }
 
   /** Returns true if any mutation queue contains the given document. */
@@ -200,19 +199,10 @@ class SQLiteLruReferenceDelegate implements ReferenceDelegate, LruDelegate {
 
   private void writeSentinel(DocumentKey key) {
     String path = EncodedPath.encode(key.getPath());
-    // Logger.debug("Ben_memory", "SQLiteLruReferenceDelegate INSERT OR REPLACE INTO target_documents. path: %s", path);
-
     persistence.execute(
         "INSERT OR REPLACE INTO target_documents (target_id, path, sequence_number) VALUES (0, ?, ?)",
         path,
         getCurrentSequenceNumber());
-
-        long documentCount =
-        persistence.query("SELECT COUNT(*) FROM target_documents")
-             .firstValue(row -> row.getLong(0));
- 
- 
-    //  Logger.debug("Ben_memory", "SQLiteLruReferenceDelegate totalDocs: %d", documentCount);
   }
 
   @Override

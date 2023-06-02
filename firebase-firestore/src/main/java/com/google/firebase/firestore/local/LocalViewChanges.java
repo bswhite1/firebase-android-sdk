@@ -19,7 +19,6 @@ import com.google.firebase.firestore.core.DocumentViewChange;
 import com.google.firebase.firestore.core.ViewSnapshot;
 import com.google.firebase.firestore.model.DocumentKey;
 import java.util.ArrayList;
-import com.google.firebase.firestore.util.Logger;
 
 /**
  * A set of changes to what documents are currently in view and out of view for a given query. These
@@ -41,7 +40,6 @@ public final class LocalViewChanges {
           break;
 
         case REMOVED:
-        // Logger.debug("Ben_Reset", "LocalViewChanges fromViewSnapshot removing doc: %s", docChange.getDocument().getKey());
           removedKeys = removedKeys.insert(docChange.getDocument().getKey());
           break;
 

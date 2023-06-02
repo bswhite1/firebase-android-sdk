@@ -35,7 +35,7 @@ public final class RemoteEvent {
   public RemoteEvent(
       SnapshotVersion snapshotVersion,
       Map<Integer, TargetChange> targetChanges,
-      Map<Integer, QueryPurpose> targetMismatches, // pendingTargetResets
+      Map<Integer, QueryPurpose> targetMismatches,
       Map<DocumentKey, MutableDocument> documentUpdates,
       Set<DocumentKey> resolvedLimboDocuments) {
     this.snapshotVersion = snapshotVersion;

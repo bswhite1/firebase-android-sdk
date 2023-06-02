@@ -322,7 +322,6 @@ public final class LocalStore implements BundleCallback {
 
   @NonNull
   private Set<DocumentKey> getKeysWithTransformResults(MutationBatchResult batchResult) {
-    // Logger.debug("Ben_Memory", "LocalStore getKeysWithTransformResults enter");
     Set<DocumentKey> result = new HashSet<>();
 
     for (int i = 0; i < batchResult.getMutationResults().size(); ++i) {
@@ -331,7 +330,6 @@ public final class LocalStore implements BundleCallback {
         result.add(batchResult.getBatch().getMutations().get(i).getKey());
       }
     }
-    // Logger.debug("Ben_Memory", "LocalStore getKeysWithTransformResults exit");
     return result;
   }
 
@@ -408,15 +406,8 @@ public final class LocalStore implements BundleCallback {
     return persistence.runTransaction(
         "Apply remote event",
         () -> {
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 1");
-
           Map<Integer, TargetChange> targetChanges = remoteEvent.getTargetChanges();
-
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 2");
-
           long sequenceNumber = persistence.getReferenceDelegate().getCurrentSequenceNumber();
-
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 3");
 
           for (Map.Entry<Integer, TargetChange> entry : targetChanges.entrySet()) {
             Integer boxedTargetId = entry.getKey();
@@ -429,23 +420,17 @@ public final class LocalStore implements BundleCallback {
               // we persist the updated query data along with the updated assignment.
               continue;
             }
-            // Logger.debug("Ben_Reset", "LocalStore applyRemoteEvent TargetChanges for id: %d", targetId);
-            
+
             targetCache.removeMatchingKeys(change.getRemovedDocuments(), targetId);
             targetCache.addMatchingKeys(change.getAddedDocuments(), targetId);
 
             TargetData newTargetData = oldTargetData.withSequenceNumber(sequenceNumber);
             if (remoteEvent.getTargetMismatches().containsKey(targetId)) {
-              // Ben could set the view / reset stuff here?
-
-
-              Logger.debug("Ben_Reset", "LocalStore applyRemoteEvent TargetMismatches for id: %d", targetId);
               newTargetData =
                   newTargetData
                       .withResumeToken(ByteString.EMPTY, SnapshotVersion.NONE)
                       .withLastLimboFreeSnapshotVersion(SnapshotVersion.NONE);
             } else if (!change.getResumeToken().isEmpty()) {
-              // Logger.debug("Ben_Reset", "LocalStore applyRemoteEvent getResumeToken is not empty for id: %d", targetId);
               newTargetData =
                   newTargetData.withResumeToken(
                       change.getResumeToken(), remoteEvent.getSnapshotVersion());
@@ -456,20 +441,12 @@ public final class LocalStore implements BundleCallback {
             // Update the query data if there are target changes (or if sufficient time has passed
             // since the last update).
             if (shouldPersistTargetData(oldTargetData, newTargetData, change)) {
-              // Logger.debug("Ben_Reset", "LocalStore applyRemoteEvent updateTargetData for id: %d", targetId);
               targetCache.updateTargetData(newTargetData);
             }
           }
 
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 4");
-
           Map<DocumentKey, MutableDocument> documentUpdates = remoteEvent.getDocumentUpdates();
-
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 5");
-
           Set<DocumentKey> limboDocuments = remoteEvent.getResolvedLimboDocuments();
-
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 6");
 
           for (DocumentKey key : documentUpdates.keySet()) {
             if (limboDocuments.contains(key)) {
@@ -477,36 +454,21 @@ public final class LocalStore implements BundleCallback {
             }
           }
 
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 7");
-
           DocumentChangeResult result = populateDocumentChanges(documentUpdates);
-
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 8");
-
           Map<DocumentKey, MutableDocument> changedDocs = result.changedDocuments;
-
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 9");
 
           // HACK: The only reason we allow snapshot version NONE is so that we can synthesize
           // remote events when we get permission denied errors while trying to resolve the
           // state of a locally cached document that is in limbo.
           SnapshotVersion lastRemoteVersion = targetCache.getLastRemoteSnapshotVersion();
-
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 10");
-
           if (!remoteVersion.equals(SnapshotVersion.NONE)) {
             hardAssert(
                 remoteVersion.compareTo(lastRemoteVersion) >= 0,
                 "Watch stream reverted to previous snapshot?? (%s < %s)",
                 remoteVersion,
                 lastRemoteVersion);
-
-                // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 11");
             targetCache.setLastRemoteSnapshotVersion(remoteVersion);
-
-            
           }
-          // Logger.debug("Ben_Memory", "LocalStore applyRemoteEvent 12");
 
           return localDocuments.getLocalViewOfDocuments(changedDocs, result.existenceChangedKeys);
         });
@@ -535,9 +497,6 @@ public final class LocalStore implements BundleCallback {
    */
   private DocumentChangeResult populateDocumentChanges(
       Map<DocumentKey, MutableDocument> documents) {
-
-        // Logger.debug("Ben_Memory", "LocalStore populateDocumentChanges enter");
-
     Map<DocumentKey, MutableDocument> changedDocs = new HashMap<>();
     List<DocumentKey> removedDocs = new ArrayList<>();
     Set<DocumentKey> conditionChanged = new HashSet<>();
@@ -582,8 +541,6 @@ public final class LocalStore implements BundleCallback {
       }
     }
     remoteDocuments.removeAll(removedDocs);
-
-    // Logger.debug("Ben_Memory", "LocalStore populateDocumentChanges exit");
     return new DocumentChangeResult(changedDocs, conditionChanged);
   }
 
@@ -692,7 +649,6 @@ public final class LocalStore implements BundleCallback {
    * target.
    */
   public TargetData allocateTarget(Target target) {
-    // Logger.debug("Ben_Memory", "LocalStore allocateTarget enter");
     int targetId;
     TargetData cached = targetCache.getTargetData(target);
     if (cached != null) {
@@ -721,7 +677,6 @@ public final class LocalStore implements BundleCallback {
       queryDataByTarget.put(targetId, cached);
       targetIdByTarget.put(target, targetId);
     }
-    // Logger.debug("Ben_Memory", "LocalStore allocateTarget exit");
     return cached;
   }
 
@@ -890,8 +845,6 @@ public final class LocalStore implements BundleCallback {
    *     query execution.
    */
   public QueryResult executeQuery(Query query, boolean usePreviousResults) {
-    // Logger.debug("Ben_Memory", "LocalStore executeQuery enter");
-
     TargetData targetData = getTargetData(query.toTarget());
     SnapshotVersion lastLimboFreeSnapshotVersion = SnapshotVersion.NONE;
     ImmutableSortedSet<DocumentKey> remoteKeys = DocumentKey.emptyKeySet();
@@ -906,8 +859,6 @@ public final class LocalStore implements BundleCallback {
             query,
             usePreviousResults ? lastLimboFreeSnapshotVersion : SnapshotVersion.NONE,
             remoteKeys);
-
-    //  Logger.debug("Ben_Memory", "LocalStore executeQuery exit");
     return new QueryResult(documents, remoteKeys);
   }
 
@@ -920,7 +871,6 @@ public final class LocalStore implements BundleCallback {
   }
 
   private void applyWriteToRemoteDocuments(MutationBatchResult batchResult) {
-    // Logger.debug("Ben_Memory", "LocalStore applyWriteToRemoteDocuments enter");
     MutationBatch batch = batchResult.getBatch();
     Set<DocumentKey> docKeys = batch.getKeys();
     for (DocumentKey docKey : docKeys) {
@@ -937,7 +887,6 @@ public final class LocalStore implements BundleCallback {
     }
 
     mutationQueue.removeMutationBatch(batch);
-    // Logger.debug("Ben_Memory", "LocalStore applyWriteToRemoteDocuments exit");
   }
 
   public LruGarbageCollector.Results collectGarbage(LruGarbageCollector garbageCollector) {

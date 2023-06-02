@@ -460,8 +460,6 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
     // Mark the connection as ONLINE because we got a message from the server.
     onlineStateTracker.updateState(OnlineState.ONLINE);
 
-    // Logger.debug("Ben_Reset", "RemoteStore handleWatchChange entered");
-
     hardAssert(
         (watchStream != null) && (watchChangeAggregator != null),
         "WatchStream and WatchStreamAggregator should both be non-null");
@@ -472,22 +470,17 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
     if (watchTargetChange != null
         && watchTargetChange.getChangeType().equals(WatchTargetChangeType.Removed)
         && watchTargetChange.getCause() != null) {
-          // Logger.debug("Ben_Reset", "RemoteStore handleWatchChange calling processTargetError");
       // There was an error on a target, don't wait for a consistent snapshot to raise events
       processTargetError(watchTargetChange);
     } else {
       if (watchChange instanceof DocumentChange) {
-        // Logger.debug("Ben_Reset", "RemoteStore handleWatchChange calling handleDocumentChange");
         watchChangeAggregator.handleDocumentChange((DocumentChange) watchChange);
       } else if (watchChange instanceof ExistenceFilterWatchChange) {
-
-        // Logger.debug("Ben_Reset", "RemoteStore handleWatchChange calling handleExistenceFilter");
         watchChangeAggregator.handleExistenceFilter((ExistenceFilterWatchChange) watchChange);
       } else {
         hardAssert(
             watchChange instanceof WatchTargetChange,
             "Expected watchChange to be an instance of WatchTargetChange");
-            // Logger.debug("Ben_Reset", "RemoteStore handleWatchChange calling handleTargetChange");
         watchChangeAggregator.handleTargetChange((WatchTargetChange) watchChange);
       }
 
@@ -496,7 +489,6 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
         if (snapshotVersion.compareTo(lastRemoteSnapshotVersion) >= 0) {
           // We have received a target change with a global snapshot if the snapshot
           // version is not equal to SnapshotVersion.MIN.
-          // Logger.debug("Ben_Reset", "RemoteStore handleWatchChange calling raiseWatchSnapshot");
           raiseWatchSnapshot(snapshotVersion);
         }
       }
@@ -559,11 +551,6 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
     // mismatches.
     for (Map.Entry<Integer, QueryPurpose> entry : remoteEvent.getTargetMismatches().entrySet()) {
       int targetId = entry.getKey();
-
-      //Ben
-      Logger.debug("Ben_Reset", "RemoteStore raiseWatchSnapshot resetting targetID: %d", targetId);
-
-
       TargetData targetData = this.listenTargets.get(targetId);
       // A watched target might have been removed already.
       if (targetData != null) {
@@ -572,7 +559,6 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
             targetId,
             targetData.withResumeToken(ByteString.EMPTY, targetData.getSnapshotVersion()));
 
-            // Logger.debug("Ben_Reset", "RemoteStore raiseWatchSnapshot sendUnwatchRequest targetID: %d", targetId);
         // Cause a hard reset by unwatching and rewatching immediately, but deliberately don't send
         // a resume token so that we get a full update.
         this.sendUnwatchRequest(targetId);
@@ -587,8 +573,6 @@ public final class RemoteStore implements WatchChangeAggregator.TargetMetadataPr
                 targetId,
                 targetData.getSequenceNumber(),
                 /*purpose=*/ entry.getValue());
-
-                // Logger.debug("Ben_Reset", "RemoteStore raiseWatchSnapshot sendWatchRequest targetID: %d", targetId);
         this.sendWatchRequest(requestTargetData);
       }
     }

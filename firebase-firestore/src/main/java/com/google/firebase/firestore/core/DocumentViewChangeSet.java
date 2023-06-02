@@ -15,7 +15,6 @@
 package com.google.firebase.firestore.core;
 
 import static com.google.firebase.firestore.util.Assert.fail;
-import com.google.firebase.firestore.util.Logger;
 
 import com.google.firebase.firestore.core.DocumentViewChange.Type;
 import com.google.firebase.firestore.model.DocumentKey;
@@ -54,11 +53,8 @@ public class DocumentViewChangeSet {
       DocumentViewChange newChange = DocumentViewChange.create(Type.ADDED, change.getDocument());
       changes.put(key, newChange);
     } else if (newType == Type.REMOVED && oldType == Type.ADDED) {
-      // Logger.debug("Ben_Reset", "DocumentViewChangeSet addChange 1 removing doc: %s", key);
       changes.remove(key);
     } else if (newType == Type.REMOVED && oldType == Type.MODIFIED) {
-
-      // Logger.debug("Ben_Reset", "DocumentViewChangeSet addChange 2 removing doc: %s", key);
       DocumentViewChange newChange = DocumentViewChange.create(Type.REMOVED, old.getDocument());
       changes.put(key, newChange);
     } else if (newType == Type.ADDED && oldType == Type.REMOVED) {

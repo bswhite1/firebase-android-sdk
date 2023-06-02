@@ -20,7 +20,6 @@ import com.google.firebase.firestore.local.TargetData;
 import com.google.firebase.firestore.model.SnapshotVersion;
 import com.google.firebase.firestore.util.AsyncQueue;
 import com.google.firebase.firestore.util.AsyncQueue.TimerId;
-import com.google.firebase.firestore.util.Logger;
 import com.google.firestore.v1.FirestoreGrpc;
 import com.google.firestore.v1.ListenRequest;
 import com.google.firestore.v1.ListenResponse;
@@ -91,9 +90,6 @@ public class WatchStream
   /** Unregisters interest in the results of the query associated with the given target ID. */
   public void unwatchTarget(int targetId) {
     hardAssert(isOpen(), "Unwatching targets requires an open stream");
-
-    // Logger.debug("Ben_Reset", "WatchStream unwatchTarget targetID: %d", targetId);
-
     ListenRequest request =
         ListenRequest.newBuilder()
             .setDatabase(serializer.databaseName())
@@ -110,8 +106,6 @@ public class WatchStream
 
     WatchChange watchChange = serializer.decodeWatchChange(listenResponse);
     SnapshotVersion snapshotVersion = serializer.decodeVersionFromListenResponse(listenResponse);
-
-    // Logger.debug("Ben_Reset", "WatchStream onNext calling onWatchChange");
     listener.onWatchChange(snapshotVersion, watchChange);
   }
 }

@@ -28,7 +28,6 @@ import com.google.firebase.firestore.core.DatabaseInfo;
 import com.google.firebase.firestore.model.DatabaseId;
 import com.google.firebase.firestore.util.AsyncQueue;
 import com.google.firebase.firestore.util.Util;
-import com.google.firebase.firestore.util.Logger;
 import io.grpc.ClientCall;
 import io.grpc.ForwardingClientCall;
 import io.grpc.Metadata;
@@ -138,7 +137,6 @@ public class FirestoreChannel {
                 @Override
                 public void onMessage(RespT message) {
                   try {
-                    // Logger.debug("Ben_Reset", "FirestoreChannel runBidiStreamingRpc onMessage calling onNext");
                     observer.onNext(message);
                     // Make sure next message can be delivered
                     call[0].request(1);

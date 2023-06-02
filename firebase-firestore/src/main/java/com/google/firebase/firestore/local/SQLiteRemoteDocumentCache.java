@@ -19,7 +19,6 @@ import static com.google.firebase.firestore.util.Assert.fail;
 import static com.google.firebase.firestore.util.Assert.hardAssert;
 import static com.google.firebase.firestore.util.Util.firstNEntries;
 import static com.google.firebase.firestore.util.Util.repeatSequence;
-import com.google.firebase.firestore.util.Logger;
 
 import android.database.Cursor;
 import androidx.annotation.VisibleForTesting;
@@ -47,7 +46,6 @@ import java.util.Set;
 import java.util.concurrent.Executor;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.lang.Runtime;
 
 final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
   /** The number of bind args per collection group in {@link #getAll(String, IndexOffset, int)} */
@@ -77,8 +75,6 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
     Timestamp timestamp = readTime.getTimestamp();
     MessageLite message = serializer.encodeMaybeDocument(document);
 
-    // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache INSERT OR REPLACE INTO remote_documents. path: %s", documentKey.getPath());
-
     db.execute(
         "INSERT OR REPLACE INTO remote_documents "
             + "(path, path_length, read_time_seconds, read_time_nanos, contents) "
@@ -90,14 +86,6 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
         message.toByteArray());
 
     indexManager.addToCollectionParentIndex(document.getKey().getCollectionPath());
-
-    long documentCount =
-       db.query("SELECT COUNT(*) FROM remote_documents")
-            .firstValue(row -> row.getLong(0));
-
-    // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache totalDocs: %d", documentCount);
-
-    // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache add exit.");
   }
 
   @Override
@@ -132,9 +120,6 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
   public Map<DocumentKey, MutableDocument> getAll(Iterable<DocumentKey> documentKeys) {
     Map<DocumentKey, MutableDocument> results = new HashMap<>();
     List<Object> bindVars = new ArrayList<>();
-
-    // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache getAll backgroundQueue. enter");
-
     for (DocumentKey key : documentKeys) {
       bindVars.add(EncodedPath.encode(key.getPath()));
 
@@ -142,18 +127,6 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
       // found.
       results.put(key, MutableDocument.newInvalidDocument(key));
     }
-
-    // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache getAll defaulted all docs");
-
-    Runtime runtime = Runtime.getRuntime();
-    long maxMemory = runtime.maxMemory();
-    long totalMemory = runtime.totalMemory();
-    long freeMemory = runtime.freeMemory();
-    long usedMemory = totalMemory - freeMemory;
-    long availableMemory = maxMemory - usedMemory;
-
-    Logger.debug("Ben_memory", "pre-query  maxMemory: %d totalMemory: %d freeMemory: %d usedMemory: %d availableMemory: %d",
-    maxMemory, totalMemory, freeMemory, usedMemory, availableMemory);
 
     SQLitePersistence.LongQuery longQuery =
         new SQLitePersistence.LongQuery(
@@ -163,37 +136,13 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
             bindVars,
             ") ORDER BY path");
 
-            // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache getAll parsing longQuery");
-
-    // BackgroundQueue backgroundQueue = new BackgroundQueue();
-
+    BackgroundQueue backgroundQueue = new BackgroundQueue();
     while (longQuery.hasMoreSubqueries()) {
       longQuery
           .performNextSubquery()
-          // .forEach(row -> processRowInBackground(backgroundQueue, results, row, /*filter*/ null));
-          .forEach(row -> {
-            // rawDocument = row.getBlob(0);
-            // readTimeSeconds = row.getInt(1);
-            // readTimeNanos = row.getInt(2);
-
-            MutableDocument document =
-              decodeMaybeDocument(row.getBlob(0), row.getInt(1), row.getInt(2));
-
-            results.put(document.getKey(), document);
-          });
+          .forEach(row -> processRowInBackground(backgroundQueue, results, row, /*filter*/ null));
     }
-    // backgroundQueue.drain();
-
-    maxMemory = runtime.maxMemory();
-    totalMemory = runtime.totalMemory();
-    freeMemory = runtime.freeMemory();
-    usedMemory = totalMemory - freeMemory;
-    availableMemory = maxMemory - usedMemory;
-
-    Logger.debug("Ben_memory", "post-query maxMemory: %d totalMemory: %d freeMemory: %d usedMemory: %d availableMemory: %d",
-    maxMemory, totalMemory, freeMemory, usedMemory, availableMemory);
-
-    // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache getAll backgroundQueue. exit");
+    backgroundQueue.drain();
     return results;
   }
 
@@ -234,9 +183,6 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
       IndexOffset offset,
       int count,
       @Nullable Function<MutableDocument, Boolean> filter) {
-
-        // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache getAll 2 backgroundQueue. enter");
-
     Timestamp readTime = offset.getReadTime().getTimestamp();
     DocumentKey documentKey = offset.getDocumentKey();
 
@@ -274,8 +220,6 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
         .binding(bindVars)
         .forEach(row -> processRowInBackground(backgroundQueue, results, row, filter));
     backgroundQueue.drain();
-
-    // Logger.debug("Ben_memory", "SQLiteRemoteDocumentCache getAll 2 backgroundQueue. exit");
     return results;
   }
 
@@ -290,7 +234,7 @@ final class SQLiteRemoteDocumentCache implements RemoteDocumentCache {
 
     // Since scheduling background tasks incurs overhead, we only dispatch to a
     // background thread if there are still some documents remaining.
-    Executor executor = Executors.DIRECT_EXECUTOR; //row.isLast() ? Executors.DIRECT_EXECUTOR : backgroundQueue;
+    Executor executor = row.isLast() ? Executors.DIRECT_EXECUTOR : backgroundQueue;
     executor.execute(
         () -> {
           MutableDocument document =

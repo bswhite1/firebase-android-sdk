@@ -36,7 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.SortedSet;
 import java.util.concurrent.Executor;
-import com.google.firebase.firestore.util.Logger;
 
 public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
   private final SQLitePersistence db;
@@ -66,7 +65,6 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
     hardAssert(keys.comparator() == null, "getOverlays() requires natural order");
     Map<DocumentKey, Overlay> result = new HashMap<>();
 
-// Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache getOverlays. enter");
     BackgroundQueue backgroundQueue = new BackgroundQueue();
     ResourcePath currentCollection = ResourcePath.EMPTY;
     List<Object> accumulatedDocumentIds = new ArrayList<>();
@@ -81,8 +79,6 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
 
     processSingleCollection(result, backgroundQueue, currentCollection, accumulatedDocumentIds);
     backgroundQueue.drain();
-
-    // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache getOverlays. exit");
     return result;
   }
 
@@ -115,9 +111,6 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
     String group = key.getCollectionGroup();
     String collectionPath = EncodedPath.encode(key.getPath().popLast());
     String documentId = key.getPath().getLastSegment();
-
-    // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache INSERT OR REPLACE INTO document_overlays. documentId: %s", documentId);
-
     db.execute(
         "INSERT OR REPLACE INTO document_overlays "
             + "(uid, collection_group, collection_path, document_id, largest_batch_id, overlay_mutation) "
@@ -149,15 +142,12 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
   public Map<DocumentKey, Overlay> getOverlays(ResourcePath collection, int sinceBatchId) {
     Map<DocumentKey, Overlay> result = new HashMap<>();
     BackgroundQueue backgroundQueue = new BackgroundQueue();
-
-    // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache getOverlays 2 . enter");
     db.query(
             "SELECT overlay_mutation, largest_batch_id FROM document_overlays "
                 + "WHERE uid = ? AND collection_path = ? AND largest_batch_id > ?")
         .binding(uid, EncodedPath.encode(collection), sinceBatchId)
         .forEach(row -> processOverlaysInBackground(backgroundQueue, result, row));
     backgroundQueue.drain();
-    // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache getOverlays 2 . exit");
     return result;
   }
 
@@ -168,8 +158,6 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
     String[] lastCollectionPath = new String[1];
     String[] lastDocumentPath = new String[1];
     int[] lastLargestBatchId = new int[1];
-
-    // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache getOverlays 3 . enter");
 
     BackgroundQueue backgroundQueue = new BackgroundQueue();
     db.query(
@@ -187,7 +175,6 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
             });
 
     if (lastCollectionPath[0] == null) {
-      // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache getOverlays 3 . exit");
       return result;
     }
 
@@ -209,8 +196,6 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
             lastLargestBatchId[0])
         .forEach(row -> processOverlaysInBackground(backgroundQueue, result, row));
     backgroundQueue.drain();
-
-    // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache getOverlays 3 . exit 2");
     return result;
   }
 
@@ -219,10 +204,9 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
     byte[] rawMutation = row.getBlob(0);
     int largestBatchId = row.getInt(1);
 
-    // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache processOverlaysInBackground. enter");
     // Since scheduling background tasks incurs overhead, we only dispatch to a
     // background thread if there are still some documents remaining.
-    Executor executor = Executors.DIRECT_EXECUTOR; //row.isLast() ? Executors.DIRECT_EXECUTOR : backgroundQueue;
+    Executor executor = row.isLast() ? Executors.DIRECT_EXECUTOR : backgroundQueue;
     executor.execute(
         () -> {
           Overlay overlay = decodeOverlay(rawMutation, largestBatchId);
@@ -230,7 +214,6 @@ public class SQLiteDocumentOverlayCache implements DocumentOverlayCache {
             results.put(overlay.getKey(), overlay);
           }
         });
-        // Logger.debug("Ben_memory", "SQLiteDocumentOverlayCache processOverlaysInBackground. exit");
   }
 
   private Overlay decodeOverlay(byte[] rawMutation, int largestBatchId) {

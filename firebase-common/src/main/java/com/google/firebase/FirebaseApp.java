@@ -338,9 +338,6 @@ public class FirebaseApp {
    */
   public void setAutomaticResourceManagementEnabled(boolean enabled) {
     checkNotDeleted();
-
-    Logger.debug("Ben_BackgroundDetector", "setAutomaticResourceManagementEnabled enabled: %s", Boolean.toString(enabled));
-
     boolean updated =
         automaticResourceManagementEnabled.compareAndSet(
             !enabled /* expect */, enabled /* update */);
@@ -452,7 +449,6 @@ public class FirebaseApp {
 
     addBackgroundStateChangeListener(
         background -> {
-          Logger.debug("Ben_Background", "addBackgroundStateChangeListener. background: " + Boolean.toString(background));
           if (!background) {
             defaultHeartBeatController.get().registerHeartBeat();
           }
@@ -480,7 +476,7 @@ public class FirebaseApp {
   }
 
   private void notifyBackgroundStateChangeListeners(boolean background) {
-    Log.d("Ben_backgroung", "Notifying background state change listeners.");
+    Log.d(LOG_TAG, "Notifying background state change listeners.");
     for (BackgroundStateChangeListener listener : backgroundStateChangeListeners) {
       listener.onBackgroundStateChanged(background);
     }
@@ -502,7 +498,6 @@ public class FirebaseApp {
     checkNotDeleted();
     if (automaticResourceManagementEnabled.get()
         && BackgroundDetector.getInstance().isInBackground()) {
-          Log.d("Ben_BackgroundDetector", "addBackgroundStateChangeListener calling onBackgroundStateChanged");
       listener.onBackgroundStateChanged(true /* isInBackground */);
     }
     backgroundStateChangeListeners.add(listener);
@@ -701,7 +696,6 @@ public class FirebaseApp {
       if (INSTANCE.get() == null) {
         GlobalBackgroundStateListener listener = new GlobalBackgroundStateListener();
         if (INSTANCE.compareAndSet(null /* expected */, listener)) {
-          Log.d("Ben_BackgroundDetector", "initializing BackgroundDetector");
           BackgroundDetector.initialize(application);
           BackgroundDetector.getInstance().addListener(listener);
         }
@@ -713,7 +707,6 @@ public class FirebaseApp {
       synchronized (LOCK) {
         for (FirebaseApp app : new ArrayList<>(INSTANCES.values())) {
           if (app.automaticResourceManagementEnabled.get()) {
-            Log.d("Ben_BackgroundDetector", "onBackgroundStateChanged calling notifyBackgroundStateChangeListeners");
             app.notifyBackgroundStateChangeListeners(background);
           }
         }

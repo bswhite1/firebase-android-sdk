@@ -32,7 +32,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import com.google.firebase.firestore.util.Logger;
 
 /**
  * View is responsible for computing the final merged truth of what docs are in a query. It gets
@@ -89,7 +88,7 @@ public class View {
   private ImmutableSortedSet<DocumentKey> syncedDocuments;
 
   /** Documents included in the remote target, but waiting a reset */
-  private ImmutableSortedSet<DocumentKey> pendingResetDocuments; //Ben how do we set this?
+  private ImmutableSortedSet<DocumentKey> pendingResetDocuments;
   private boolean resetComplete = true;
 
   /** Documents in the view but not in the remote target */
@@ -205,8 +204,6 @@ public class View {
         changeSet.addChange(DocumentViewChange.create(Type.ADDED, newDoc));
         changeApplied = true;
       } else if (oldDoc != null && newDoc == null) {
-        // Ben 
-        // Logger.debug("Ben_Reset", "computeDocChanges removing doc: %s", oldDoc);
         changeSet.addChange(DocumentViewChange.create(Type.REMOVED, oldDoc));
         changeApplied = true;
         if (lastDocInLimit != null || firstDocInLimit != null) {
@@ -240,7 +237,6 @@ public class View {
                 : newDocumentSet.getFirstDocument();
         newDocumentSet = newDocumentSet.remove(oldDoc.getKey());
         newMutatedKeys = newMutatedKeys.remove(oldDoc.getKey());
-        // Logger.debug("Ben_Reset", "computeDocChanges has limit removing doc: %s", oldDoc);
         changeSet.addChange(DocumentViewChange.create(Type.REMOVED, oldDoc));
       }
     }
@@ -339,8 +335,6 @@ public class View {
       // syncState and generate a ViewChange as appropriate. We are guaranteed to get a new
       // TargetChange that sets `current` back to true once the client is back online.
       this.current = false;
-
-      // Logger.debug("Ben_Limbo", "applyOnlineStateChange calling applyChanges");
       return applyChanges(
           new DocumentChanges(
               documentSet, new DocumentViewChangeSet(), mutatedKeys, /*needsRefill=*/ false));
@@ -353,11 +347,9 @@ public class View {
   private void applyTargetChange(TargetChange targetChange) {
     if (targetChange != null) {
       for (DocumentKey documentKey : targetChange.getAddedDocuments()) {
-        Logger.debug("Ben_Limbo", "applyTargetChange adding %s to syncedDocuments", documentKey.getPath());
         syncedDocuments = syncedDocuments.insert(documentKey);
 
         if (pendingResetDocuments.contains(documentKey)) {
-          Logger.debug("Ben_Limbo", "applyTargetChange removing %s from pendingResetDocuments", documentKey.getPath());
           pendingResetDocuments = pendingResetDocuments.remove(documentKey);
           resetComplete = true;
         }
@@ -370,7 +362,6 @@ public class View {
       }
       for (DocumentKey documentKey : targetChange.getRemovedDocuments()) {
         syncedDocuments = syncedDocuments.remove(documentKey);
-        Logger.debug("Ben_Reset", "applyTargetChange removing %s from syncedDocuments", documentKey);
       }
       current = targetChange.isCurrent();
     }
@@ -394,19 +385,16 @@ public class View {
 
     if (resetComplete) {
       for (DocumentKey documentKey : pendingResetDocuments) {
-        Logger.debug("Ben_Reset", "view updateLimboDocuments removing %s from pendingResetDocuments, adding to limboDocs", documentKey.getPath());
-          limboDocuments = limboDocuments.insert(documentKey);
-          pendingResetDocuments = pendingResetDocuments.remove(documentKey);
+        limboDocuments = limboDocuments.insert(documentKey);
+        pendingResetDocuments = pendingResetDocuments.remove(documentKey);
       }
     }
-    
+
     // Diff the new limbo docs with the old limbo docs.
     List<LimboDocumentChange> changes =
         new ArrayList<>(oldLimboDocs.size() + limboDocuments.size());
     for (DocumentKey key : oldLimboDocs) {
       if (!limboDocuments.contains(key)) {
-
-        Logger.debug("Ben_Reset", "view updateLimboDocuments removing doc: %s", key.getPath());
         changes.add(new LimboDocumentChange(LimboDocumentChange.Type.REMOVED, key));
       }
     }

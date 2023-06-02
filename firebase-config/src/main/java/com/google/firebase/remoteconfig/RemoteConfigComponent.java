@@ -352,7 +352,6 @@ public class RemoteConfigComponent {
       if (INSTANCE.get() == null) {
         GlobalBackgroundListener globalBackgroundListener = new GlobalBackgroundListener();
         if (INSTANCE.compareAndSet(null, globalBackgroundListener)) {
-          Log.d("Ben_BackgroundDetector", "RemoteConfigComponent initializing BackgroundDetector");
           BackgroundDetector.initialize(application);
           BackgroundDetector.getInstance().addListener(globalBackgroundListener);
         }
@@ -361,7 +360,6 @@ public class RemoteConfigComponent {
 
     @Override
     public void onBackgroundStateChanged(boolean isInBackground) {
-      Log.d("Ben_BackgroundDetector", "RemoteConfigComponent onBackgroundStateChanged isInBackground: %s", Boolean.toString(isInBackground));
       notifyRCInstances(isInBackground);
     }
   }
